@@ -1,0 +1,298 @@
+/* ── Student Dashboard Layout ─────────────────────────────────────── */
+
+.sd-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f1f5f9;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── TOP NAVBAR ───────────────────────────────────────────────────── */
+
+.sd-navbar {
+  height: 62px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.sd-navbar-left,
+.sd-navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Hamburger */
+.sd-hamburger {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.45rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: background 0.18s, color 0.18s;
+}
+.sd-hamburger:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Brand */
+.sd-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-decoration: none;
+}
+.sd-brand-icon { color: #2563eb; }
+.sd-brand-text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+/* Notification bell */
+.sd-icon-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: background 0.18s, color 0.18s;
+}
+.sd-icon-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.sd-notif-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  line-height: 1;
+}
+
+/* User dropdown trigger */
+.sd-user-menu { position: relative; }
+
+.sd-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.38rem 0.75rem 0.38rem 0.45rem;
+  cursor: pointer;
+  color: #0f172a;
+  transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+.sd-user-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.sd-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.sd-username {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-chevron {
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.sd-chevron.open { transform: rotate(180deg); }
+
+/* Dropdown panel */
+.sd-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.06);
+  min-width: 170px;
+  padding: 0.4rem;
+  z-index: 200;
+  animation: sd-fade-drop 0.15s ease;
+}
+
+@keyframes sd-fade-drop {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.sd-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #0f172a;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+.sd-dropdown-item:hover { background: #f1f5f9; }
+.sd-dropdown-item.danger { color: #ef4444; }
+.sd-dropdown-item.danger:hover { background: #fef2f2; }
+
+.sd-dropdown-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 0.3rem 0.4rem;
+}
+
+/* ── BODY (sidebar + main) ────────────────────────────────────────── */
+
+.sd-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ──────────────────────────────────────────────────────── */
+
+.sd-sidebar {
+  background: #0f172a;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0.6rem;
+  gap: 0.25rem;
+  overflow: hidden;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+.sd-sidebar.open      { width: 220px; }
+.sd-sidebar.collapsed { width: 62px; }
+
+.sd-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.72rem 0.9rem;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  width: 100%;
+}
+.sd-nav-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e2e8f0;
+}
+.sd-nav-item.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+.sd-nav-item.active .sd-nav-icon { color: #ffffff; }
+
+.sd-nav-icon { flex-shrink: 0; }
+
+.sd-nav-label {
+  overflow: hidden;
+  transition: opacity 0.2s ease, max-width 0.25s ease;
+  max-width: 160px;
+}
+.sd-sidebar.collapsed .sd-nav-label {
+  opacity: 0;
+  max-width: 0;
+}
+
+/* ── MAIN CONTENT ─────────────────────────────────────────────────── */
+
+.sd-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.sd-page-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 1.25rem 2rem;
+  flex-shrink: 0;
+}
+
+.sd-page-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.sd-page-body {
+  flex: 1;
+  padding: 2rem;
+}
+
+.sd-coming-soon {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
