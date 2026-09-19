@@ -37,6 +37,38 @@ export default function StudentUI({ user, onLogout }) {
     const displayName = nameFromEmail(user.email);
     const initial = displayName[0] ?? 'S';
 
+    // Unread notifications count state
+    const [unreadNotifsCount, setUnreadNotifsCount] = useState(() => {
+        try {
+            const saved = localStorage.getItem('student_notifications');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                return Array.isArray(parsed) ? parsed.filter(n => n.unread).length : 3;
+            }
+        } catch (e) { /* ignore */ }
+        return 3;
+    });
+
+    useEffect(() => {
+        const syncNotifs = () => {
+            try {
+                const saved = localStorage.getItem('student_notifications');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed)) {
+                        setUnreadNotifsCount(parsed.filter(n => n.unread).length);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        };
+        window.addEventListener('student_notifications_updated', syncNotifs);
+        window.addEventListener('storage', syncNotifs);
+        return () => {
+            window.removeEventListener('student_notifications_updated', syncNotifs);
+            window.removeEventListener('storage', syncNotifs);
+        };
+    }, []);
+
     /* Close dropdown when clicking outside */
     useEffect(() => {
         function handleOutsideClick(e) {
@@ -77,10 +109,10 @@ export default function StudentUI({ user, onLogout }) {
                         id="sd-notif-btn"
                         className="sd-icon-btn"
                         title="Notifications"
-                        onClick={() => { setActivePage('notifications'); }}
+                        onClick={() => { setActivePage('studentnotifications'); }}
                     >
                         <Bell size={20} />
-                        <span className="sd-notif-badge">3</span>
+                        {unreadNotifsCount > 0 && <span className="sd-notif-badge">{unreadNotifsCount}</span>}
                     </button>
 
                     {/* Student dropdown */}
@@ -105,7 +137,7 @@ export default function StudentUI({ user, onLogout }) {
                                 <button
                                     className="sd-dropdown-item"
                                     role="menuitem"
-                                    onClick={() => { setActivePage('profile'); setDropdownOpen(false); }}
+                                    onClick={() => { setActivePage('studentprofile'); setDropdownOpen(false); }}
                                 >
                                     <User size={15} />
                                     My Profile
@@ -161,7 +193,7 @@ export default function StudentUI({ user, onLogout }) {
                         {currentpage === 'studentjobs' && <Studentjobs user={user} />}
                         {currentpage === 'studentapplications' && <Studentapplication />}
                         {currentpage === 'studentinterviews' && <Studentinterviews />}
-                        {currentpage === 'studentnotifications' && <Studentnotifications />}
+                        {currentpage === 'studentnotifications' && <Studentnotifications onNavigate={setActivePage} />}
                     </div>
                 </main>
             </div>

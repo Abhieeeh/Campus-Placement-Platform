@@ -1,46 +1,12 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     Search, Briefcase, Building, MapPin, DollarSign, Calendar,
     CheckCircle, XCircle, AlertTriangle, Eye, Upload, Send, X,
     Sparkles, Filter, Check, Edit2, FileText, ExternalLink, ArrowRight,
     GraduationCap, Award, Info
 } from 'lucide-react';
+import { placementService } from '../../services/placementService';
 import './Studentjobs.css';
-
-// Initial Mock Job Listings Data
-const INITIAL_JOBS = [
-    {
-        id: 'job-1',
-        role: 'Software Development Engineer (SDE-1)',
-        company: 'Google',
-        color: 'linear-gradient(135deg, #4285F4, #34A853)',
-        location: 'Bangalore / Hyderabad',
-        type: 'Full-time',
-        salary: '₹28 - ₹34 LPA',
-        deadline: '25 Sep 2026',
-        postedDate: '2 days ago',
-        description: 'Join Google’s core engineering team to design, test, deploy and maintain scalable software solutions that impact billions of worldwide users.',
-        responsibilities: [
-            'Design, develop, test, deploy, maintain and enhance software solutions.',
-            'Collaborate with product managers, UX designers, and fellow engineers.',
-            'Optimize system performance, scalability, and security across distributed cloud environments.'
-        ],
-        qualifications: [
-            'B.Tech/B.E. in Computer Science, IT, or related technical field.',
-            'Strong foundation in Data Structures, Algorithms, and System Design.',
-            'Proficiency in Java, C++, Python, or Go.',
-            'Hands-on experience with cloud platforms (GCP/AWS) is a plus.'
-        ],
-        skills: ['Data Structures', 'Java', 'Python', 'System Design', 'Cloud Computing'],
-        criteria: {
-            minCgpa: 7.5,
-            eligibleBranches: ['CSE', 'IT', 'ECE', 'AI/DS'],
-            maxBacklogs: 0,
-            graduationYear: '2027'
-        }
-    }
-
-];
 
 export default function Studentjobs({ user }) {
     // Helper to read profile from localStorage
@@ -106,9 +72,37 @@ export default function Studentjobs({ user }) {
         };
     }, []);
 
-    // Job posts state (track applied jobs)
-    const [jobs, setJobs] = useState(INITIAL_JOBS);
+    // Job posts state (loaded via placementService)
+    const [jobs, setJobs] = useState([]);
     const [appliedJobIds, setAppliedJobIds] = useState(new Set());
+    const [loadingJobs, setLoadingJobs] = useState(true);
+
+    useEffect(() => {
+        const fetchJobs = async () => {
+            try {
+                const data = await placementService.getJobs();
+                setJobs(data);
+            } catch (e) {
+                // handle error
+            } finally {
+                setLoadingJobs(false);
+            }
+        };
+        fetchJobs();
+
+        // Sync applied job IDs
+        const syncApplied = async () => {
+            try {
+                const apps = await placementService.getApplications();
+                setAppliedJobIds(new Set(apps.map(a => a.jobId)));
+            } catch (e) {
+                // ignore
+            }
+        };
+        syncApplied();
+        window.addEventListener('student_applications_updated', syncApplied);
+        return () => window.removeEventListener('student_applications_updated', syncApplied);
+    }, []);
 
     // Search and filter states
     const [searchQuery, setSearchQuery] = useState('');
@@ -231,7 +225,7 @@ export default function Studentjobs({ user }) {
         }
     };
 
-    const handleSubmitApplication = (e) => {
+    const handleSubmitApplication = async (e) => {
         e.preventDefault();
         // Update student profile state if edited
         const updatedPersonal = {
@@ -275,6 +269,7 @@ export default function Studentjobs({ user }) {
 
         if (selectedJobForApply) {
             setAppliedJobIds(prev => new Set(prev).add(selectedJobForApply.id));
+            await placementService.applyToJob(selectedJobForApply, studentProfile, uploadedNewFile);
         }
 
         setApplySuccessState(true);
