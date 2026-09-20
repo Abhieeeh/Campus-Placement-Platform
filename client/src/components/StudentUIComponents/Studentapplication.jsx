@@ -100,11 +100,11 @@ export default function Studentapplication() {
     const stats = useMemo(() => {
         return {
             total: applications.length,
-            applied: applications.filter(a => a.status.toLowerCase() === 'applied').length,
-            shortlisted: applications.filter(a => a.status.toLowerCase() === 'shortlisted').length,
-            interview: applications.filter(a => a.status.toLowerCase() === 'interview').length,
-            saved: applications.filter(a => a.isSaved || a.status.toLowerCase() === 'saved').length,
-            offered: applications.filter(a => a.status.toLowerCase() === 'offered').length
+            applied: applications.filter(a => (a.status || '').toLowerCase() === 'applied' || (a.status || '').toLowerCase() === 'new').length,
+            shortlisted: applications.filter(a => (a.status || '').toLowerCase() === 'shortlisted').length,
+            interview: applications.filter(a => (a.status || '').toLowerCase() === 'interview').length,
+            saved: applications.filter(a => a.isSaved || (a.status || '').toLowerCase() === 'saved').length,
+            offered: applications.filter(a => (a.status || '').toLowerCase() === 'offered').length
         };
     }, [applications]);
 
@@ -112,21 +112,26 @@ export default function Studentapplication() {
     const filteredApplications = useMemo(() => {
         return applications.filter(app => {
             const q = searchQuery.toLowerCase().trim();
+            const role = (app.role || app.jobTitle || '').toLowerCase();
+            const company = (app.company || '').toLowerCase();
+            const location = (app.location || '').toLowerCase();
+            const status = (app.status || '').toLowerCase();
+
             const matchesSearch =
                 q === '' ||
-                app.role.toLowerCase().includes(q) ||
-                app.company.toLowerCase().includes(q) ||
-                app.location.toLowerCase().includes(q) ||
-                app.status.toLowerCase().includes(q) ||
+                role.includes(q) ||
+                company.includes(q) ||
+                location.includes(q) ||
+                status.includes(q) ||
                 (app.id && app.id.toLowerCase().includes(q));
 
             if (!matchesSearch) return false;
 
-            if (activeFilter === 'applied') return app.status.toLowerCase() === 'applied';
-            if (activeFilter === 'saved') return app.isSaved || app.status.toLowerCase() === 'saved';
-            if (activeFilter === 'shortlisted') return app.status.toLowerCase() === 'shortlisted';
-            if (activeFilter === 'interview') return app.status.toLowerCase() === 'interview';
-            if (activeFilter === 'offered') return app.status.toLowerCase() === 'offered';
+            if (activeFilter === 'applied') return status === 'applied' || status === 'new';
+            if (activeFilter === 'saved') return app.isSaved || status === 'saved';
+            if (activeFilter === 'shortlisted') return status === 'shortlisted';
+            if (activeFilter === 'interview') return status === 'interview';
+            if (activeFilter === 'offered') return status === 'offered';
 
             return true;
         });

@@ -1,25 +1,23 @@
-import { INITIAL_JOBS } from '../data/mockData.js';
-
-// In-memory data store (can be replaced with MongoDB/PostgreSQL model)
-let jobs = [...INITIAL_JOBS];
+// In-memory data store (ready to be replaced with MongoDB Mongoose model)
+let jobs = [];
 
 export const getJobs = (req, res) => {
     try {
-        const { search, type, eligibleOnly } = req.query;
+        const { search, type } = req.query;
         let filtered = [...jobs];
 
         if (search) {
             const q = search.toLowerCase().trim();
             filtered = filtered.filter(j =>
-                j.role.toLowerCase().includes(q) ||
-                j.company.toLowerCase().includes(q) ||
-                j.location.toLowerCase().includes(q) ||
-                j.skills.some(s => s.toLowerCase().includes(q))
+                (j.role || j.title || '').toLowerCase().includes(q) ||
+                (j.company || '').toLowerCase().includes(q) ||
+                (j.location || '').toLowerCase().includes(q) ||
+                (Array.isArray(j.skills) && j.skills.some(s => (s || '').toLowerCase().includes(q)))
             );
         }
 
         if (type && type !== 'all') {
-            filtered = filtered.filter(j => j.type.toLowerCase() === type.toLowerCase());
+            filtered = filtered.filter(j => (j.type || '').toLowerCase() === type.toLowerCase());
         }
 
         res.status(200).json(filtered);
@@ -31,7 +29,7 @@ export const getJobs = (req, res) => {
 export const getJobById = (req, res) => {
     try {
         const { id } = req.params;
-        const job = jobs.find(j => j.id === id);
+        const job = jobs.find(j => (j.id === id || j._id === id));
         if (!job) {
             return res.status(404).json({ message: 'Job posting not found' });
         }
@@ -52,5 +50,29 @@ export const createJob = (req, res) => {
         res.status(201).json(newJob);
     } catch (error) {
         res.status(500).json({ message: 'Failed to create job posting', error: error.message });
+    }
+};
+
+export const updateJob = (req, res) => {
+    try {
+        const { id } = req.params;
+        const idx = jobs.findIndex(j => (j.id === id || j._id === id));
+        if (idx === -1) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
+        jobs[idx] = { ...jobs[idx], ...req.body };
+        res.status(200).json(jobs[idx]);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update job posting', error: error.message });
+    }
+};
+
+export const deleteJob = (req, res) => {
+    try {
+        const { id } = req.params;
+        jobs = jobs.filter(j => (j.id !== id && j._id !== id));
+        res.status(200).json({ message: 'Job posting removed successfully', id });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete job posting', error: error.message });
     }
 };

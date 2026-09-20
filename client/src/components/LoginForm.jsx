@@ -1,11 +1,20 @@
-import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, AlertCircle, Building2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, Building2, CheckCircle } from 'lucide-react';
 
-export default function LoginForm({ role, onLogin }) {
-  const [email, setEmail] = useState('');
+export default function LoginForm({ role, onLogin, initialEmail = '', successMessage = '' }) {
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(successMessage);
+
+  useEffect(() => {
+    if (initialEmail) setEmail(initialEmail);
+  }, [initialEmail]);
+
+  useEffect(() => {
+    if (successMessage) setSuccess(successMessage);
+  }, [successMessage]);
 
   const isRecruiter = role === 'recruiter';
   const emailLabel = isRecruiter ? 'Company Email / Company ID' : 'Email Address';
@@ -23,13 +32,32 @@ export default function LoginForm({ role, onLogin }) {
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
-    onLogin({ email, role });
+    onLogin({ email, role, password });
   }
 
 
 
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>
+      {success && (
+        <div style={{
+          background: '#ecfdf5',
+          border: '1px solid #a7f3d0',
+          color: '#065f46',
+          padding: '0.75rem 1rem',
+          borderRadius: '8px',
+          fontSize: '0.86rem',
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          marginBottom: '1rem'
+        }}>
+          <CheckCircle size={17} style={{ flexShrink: 0, color: '#059669' }} />
+          <span>{success}</span>
+        </div>
+      )}
+
       {error && (
         <div className="error-banner">
           <AlertCircle size={16} />

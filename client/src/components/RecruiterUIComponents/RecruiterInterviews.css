@@ -1,0 +1,204 @@
+/* ── Recruiter Interviews Styles ─────────────────────────────────── */
+
+.ri-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Header Action Row */
+.ri-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.ri-tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  background: #e2e8f0;
+  padding: 0.25rem;
+  border-radius: 10px;
+}
+
+.ri-tab-btn {
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.15s ease;
+}
+.ri-tab-btn.active {
+  background: #ffffff;
+  color: #0d9488;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.ri-schedule-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  padding: 0.6rem 1.25rem;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.3);
+}
+.ri-schedule-cta:hover {
+  background: linear-gradient(135deg, #0f766e 0%, #047857 100%);
+  transform: translateY(-1px);
+}
+
+/* Interview Cards Grid */
+.ri-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.ri-interview-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: all 0.18s ease;
+}
+.ri-interview-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.ri-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ri-cand-main {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.ri-cand-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
+  color: #ffffff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ri-cand-titles h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.2rem 0;
+}
+.ri-job-tag {
+  font-size: 0.84rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Interview Details Grid */
+.ri-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  background: #f8fafc;
+  padding: 0.85rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.ri-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.85rem;
+  color: #334155;
+}
+.ri-detail-item svg {
+  color: #0d9488;
+  flex-shrink: 0;
+}
+.ri-detail-item strong {
+  color: #0f172a;
+}
+
+/* Feedback & Result Box for Completed Interviews */
+.ri-feedback-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 9px;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.85rem;
+  color: #166534;
+}
+.ri-feedback-box.not-selected {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+/* Actions Footer */
+.ri-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.ri-meet-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  padding: 0.45rem 0.9rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.ri-meet-link-btn:hover {
+  background: #dbeafe;
+}
+
+.ri-actions-btns {
+  display: flex;
+  gap: 0.5rem;
+}

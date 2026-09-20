@@ -1,6 +1,5 @@
-import { INITIAL_NOTIFICATIONS } from '../data/mockData.js';
-
-let notifications = [...INITIAL_NOTIFICATIONS];
+// In-memory data store (ready to be replaced with MongoDB Mongoose model)
+let notifications = [];
 
 export const getNotifications = (req, res) => {
     try {
@@ -26,10 +25,20 @@ export const markAllAsRead = (req, res) => {
     }
 };
 
+export const markSingleAsRead = (req, res) => {
+    try {
+        const { id } = req.params;
+        notifications = notifications.map(n => (n.id === id || n._id === id) ? { ...n, unread: false } : n);
+        res.status(200).json({ message: 'Notification marked as read', id });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update notification', error: error.message });
+    }
+};
+
 export const deleteNotification = (req, res) => {
     try {
         const { id } = req.params;
-        notifications = notifications.filter(n => n.id !== id);
+        notifications = notifications.filter(n => (n.id !== id && n._id !== id));
         res.status(200).json({ message: 'Notification deleted', id });
     } catch (error) {
         res.status(500).json({ message: 'Failed to delete notification', error: error.message });

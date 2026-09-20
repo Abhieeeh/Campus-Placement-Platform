@@ -1,0 +1,180 @@
+/* ── Recruiter Notifications Styles ───────────────────────────────── */
+
+.rnotif-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.rnotif-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: #ffffff;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.rnotif-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rnotif-filter-btn {
+  padding: 0.4rem 0.85rem;
+  border-radius: 7px;
+  background: #f1f5f9;
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.rnotif-filter-btn.active {
+  background: #0d9488;
+  color: #ffffff;
+}
+
+.rnotif-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.rnotif-btn-sec {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 0.4rem 0.8rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+}
+.rnotif-btn-sec:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* Notification List */
+.rnotif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rnotif-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.1rem 1.35rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.rnotif-card.unread {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.08);
+}
+
+.rnotif-left {
+  display: flex;
+  gap: 0.95rem;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.rnotif-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rnotif-icon-box.application { background: #dbeafe; color: #2563eb; }
+.rnotif-icon-box.interview   { background: #ccfbf1; color: #0d9488; }
+.rnotif-icon-box.deadline    { background: #fff7ed; color: #ea580c; }
+.rnotif-icon-box.selection   { background: #dcfce7; color: #16a34a; }
+
+.rnotif-content h4 {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.rnotif-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0d9488;
+  display: inline-block;
+}
+
+.rnotif-content p {
+  font-size: 0.85rem;
+  color: #475569;
+  margin: 0 0 0.4rem 0;
+  line-height: 1.45;
+}
+
+.rnotif-time {
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.rnotif-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.rnotif-goto-btn {
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: background 0.15s;
+}
+.rnotif-goto-btn:hover {
+  background: #1e293b;
+}
+
+.rnotif-del-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+}
+.rnotif-del-btn:hover {
+  color: #ef4444;
+  background: #fef2f2;
+}
