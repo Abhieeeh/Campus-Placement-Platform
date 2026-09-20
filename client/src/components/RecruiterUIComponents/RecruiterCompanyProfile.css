@@ -1,0 +1,151 @@
+/* ── Recruiter Company Profile Styles ─────────────────────────────── */
+
+.rcmp-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1000px;
+}
+
+.rcmp-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.rcmp-card-header {
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.rcmp-header-left {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.rcmp-logo-box {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
+  color: #ffffff;
+  font-size: 1.6rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.35);
+}
+
+.rcmp-title-wrap h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem 0;
+}
+.rcmp-title-wrap p {
+  font-size: 0.86rem;
+  color: #94a3b8;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rcmp-edit-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 0.55rem 1.15rem;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.rcmp-edit-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rcmp-card-body {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.rcmp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.rcmp-sec-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.4rem;
+}
+.rcmp-sec-title svg {
+  color: #0d9488;
+}
+
+.rcmp-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+@media (max-width: 640px) {
+  .rcmp-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rcmp-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.rcmp-info-lbl {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.rcmp-info-val {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+.rcmp-info-val a {
+  color: #0d9488;
+  text-decoration: none;
+}
+.rcmp-info-val a:hover {
+  text-decoration: underline;
+}
+
+.rcmp-save-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}

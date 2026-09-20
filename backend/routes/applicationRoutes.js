@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.get('/', getApplications);
 router.post('/', applyToJob);
+router.put('/:id', updateApplication);
 router.patch('/:id', updateApplication);
 router.delete('/:id', deleteApplication);
 

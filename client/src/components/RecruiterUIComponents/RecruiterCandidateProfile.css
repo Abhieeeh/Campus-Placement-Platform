@@ -1,0 +1,328 @@
+/* ── Recruiter Candidate Profile Modal ────────────────────────────── */
+
+.rcp-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 820px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
+  animation: rcp-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rcp-pop {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.rcp-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background: linear-gradient(to right, #f8fafc, #ffffff);
+}
+
+.rcp-header-left {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.rcp-avatar-large {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
+  color: #ffffff;
+  font-size: 1.6rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.3);
+  flex-shrink: 0;
+}
+
+.rcp-title-group h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.3rem 0;
+}
+
+.rcp-meta-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rcp-meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+}
+.rcp-meta-tag.cgpa {
+  background: #ecfdf5;
+  color: #059669;
+  font-weight: 700;
+}
+
+.rcp-close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.rcp-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Modal Body */
+.rcp-body {
+  padding: 1.75rem 2rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.rcp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rcp-section-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.4rem;
+}
+.rcp-section-title svg {
+  color: #0d9488;
+}
+
+/* Contact Info Grid */
+.rcp-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.rcp-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.86rem;
+  color: #334155;
+  background: #f8fafc;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.rcp-contact-item svg {
+  color: #64748b;
+  flex-shrink: 0;
+}
+.rcp-contact-item a {
+  color: #0d9488;
+  text-decoration: none;
+  font-weight: 500;
+}
+.rcp-contact-item a:hover {
+  text-decoration: underline;
+}
+
+/* Skills Badges */
+.rcp-skills-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.rcp-skill-pill {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #ccfbf1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+}
+
+/* Projects & Experience */
+.rcp-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rcp-entry-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+}
+.rcp-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+}
+.rcp-entry-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+.rcp-entry-company {
+  font-size: 0.82rem;
+  color: #0d9488;
+  font-weight: 600;
+}
+.rcp-entry-duration {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+.rcp-entry-desc {
+  font-size: 0.84rem;
+  color: #475569;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Resume Preview Block */
+.rcp-resume-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  padding: 0.9rem 1.25rem;
+  border-radius: 10px;
+}
+.rcp-resume-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.rcp-pdf-icon {
+  color: #ef4444;
+}
+.rcp-resume-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+.rcp-resume-size {
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.rcp-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 0.45rem 0.9rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.rcp-download-btn:hover {
+  background: #1e293b;
+  transform: translateY(-1px);
+}
+
+/* Footer Actions */
+.rcp-footer {
+  padding: 1.2rem 2rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+}
+
+.rcp-status-curr {
+  font-size: 0.86rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rcp-action-buttons {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.rcp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  border: 1px solid transparent;
+}
+.rcp-btn.reject {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+.rcp-btn.reject:hover {
+  background: #fee2e2;
+}
+.rcp-btn.shortlist {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.rcp-btn.shortlist:hover {
+  background: #fde68a;
+}
+.rcp-btn.interview {
+  background: #0d9488;
+  color: #ffffff;
+}
+.rcp-btn.interview:hover {
+  background: #0f766e;
+}
+.rcp-btn.offer {
+  background: #059669;
+  color: #ffffff;
+}
+.rcp-btn.offer:hover {
+  background: #047857;
+}

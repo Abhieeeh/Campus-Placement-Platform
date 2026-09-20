@@ -81,9 +81,13 @@ export default function Studentjobs({ user }) {
         const fetchJobs = async () => {
             try {
                 const data = await placementService.getJobs();
-                setJobs(data);
+                if (Array.isArray(data) && data.length > 0) {
+                    setJobs(data);
+                } else {
+                    setJobs(placementService.INITIAL_DB_JOBS || []);
+                }
             } catch (e) {
-                // handle error
+                console.error('Failed to load jobs:', e);
             } finally {
                 setLoadingJobs(false);
             }
@@ -94,14 +98,21 @@ export default function Studentjobs({ user }) {
         const syncApplied = async () => {
             try {
                 const apps = await placementService.getApplications();
-                setAppliedJobIds(new Set(apps.map(a => a.jobId)));
+                setAppliedJobIds(new Set((apps || []).map(a => a.jobId)));
             } catch (e) {
                 // ignore
             }
         };
         syncApplied();
+
         window.addEventListener('student_applications_updated', syncApplied);
-        return () => window.removeEventListener('student_applications_updated', syncApplied);
+        window.addEventListener('recruiter_jobs_updated', fetchJobs);
+        window.addEventListener('storage', fetchJobs);
+        return () => {
+            window.removeEventListener('student_applications_updated', syncApplied);
+            window.removeEventListener('recruiter_jobs_updated', fetchJobs);
+            window.removeEventListener('storage', fetchJobs);
+        };
     }, []);
 
     // Search and filter states
@@ -129,16 +140,36 @@ export default function Studentjobs({ user }) {
         linkedin: studentProfile.linkedin || 'https://linkedin.com/in/abhishekk'
     });
 
-    // Helper: Check student eligibility for a job
-    const checkEligibility = (jobCriteria) => {
-        const studentCgpaNum = parseFloat(studentProfile.cgpa) || 0;
-        const studentBacklogsNum = parseInt(studentProfile.backlogs, 10) || 0;
+    // Helper: Check student eligibility for a job (robust against different object schemas)
+    const checkEligibility = (jobOrCriteria) => {
+        if (!jobOrCriteria) {
+            return {
+                isEligible: true,
+                cgpaOk: true,
+                backlogsOk: true,
+                branchOk: true,
+                minCgpa: 0,
+                maxBacklogs: 0,
+                eligibleBranches: ['All Branches'],
+                graduationYear: '2027',
+                reason: 'Open to all'
+            };
+        }
+        const criteria = jobOrCriteria.criteria || jobOrCriteria;
+        const studentCgpaNum = parseFloat(studentProfile?.cgpa) || 0;
+        const studentBacklogsNum = parseInt(studentProfile?.backlogs, 10) || 0;
 
-        const cgpaOk = studentCgpaNum >= jobCriteria.minCgpa;
-        const backlogsOk = studentBacklogsNum <= jobCriteria.maxBacklogs;
+        const minCgpa = criteria.minCgpa ?? jobOrCriteria.minCgpa ?? 0;
+        const maxBacklogs = criteria.maxBacklogs ?? jobOrCriteria.maxBacklogs ?? 0;
+        const rawBranches = criteria.eligibleBranches || jobOrCriteria.branches || criteria.branches || ['All Branches'];
+        const eligibleBranches = Array.isArray(rawBranches) ? rawBranches : [rawBranches];
+        const studentBranch = (studentProfile?.branch || '').toUpperCase().trim();
+
+        const cgpaOk = studentCgpaNum >= minCgpa;
+        const backlogsOk = studentBacklogsNum <= maxBacklogs;
         const branchOk =
-            jobCriteria.eligibleBranches.includes('All Branches') ||
-            jobCriteria.eligibleBranches.includes(studentProfile.branch);
+            eligibleBranches.some(b => typeof b === 'string' && (b.toUpperCase() === 'ALL BRANCHES' || b.toUpperCase() === 'ALL')) ||
+            eligibleBranches.some(b => typeof b === 'string' && b.toUpperCase().trim() === studentBranch);
 
         const isEligible = cgpaOk && backlogsOk && branchOk;
 
@@ -147,39 +178,50 @@ export default function Studentjobs({ user }) {
             cgpaOk,
             backlogsOk,
             branchOk,
+            minCgpa,
+            maxBacklogs,
+            eligibleBranches,
+            graduationYear: criteria.graduationYear || jobOrCriteria.graduationYear || '2027',
             reason: !backlogsOk
-                ? `Cannot apply: ${studentBacklogsNum} active backlog${studentBacklogsNum > 1 ? 's' : ''} present (Max allowed: ${jobCriteria.maxBacklogs})`
+                ? `Cannot apply: ${studentBacklogsNum} active backlog${studentBacklogsNum > 1 ? 's' : ''} present (Max allowed: ${maxBacklogs})`
                 : !cgpaOk
-                    ? `CGPA too low (Requires min ${jobCriteria.minCgpa})`
+                    ? `CGPA too low (Requires min ${minCgpa})`
                     : !branchOk
-                        ? `Branch ${studentProfile.branch} not listed`
+                        ? `Branch ${studentProfile?.branch || 'N/A'} not listed`
                         : 'Meets all criteria'
         };
     };
 
     // Calculate total eligible count across all current jobs
     const eligibleJobsCount = useMemo(() => {
-        return jobs.filter(job => checkEligibility(job.criteria).isEligible).length;
+        return (jobs || []).filter(job => checkEligibility(job).isEligible).length;
     }, [jobs, studentProfile]);
 
     // Filter and Search logic
     const filteredJobs = useMemo(() => {
-        return jobs.filter(job => {
+        return (jobs || []).filter(job => {
+            if (!job) return false;
+            const role = (job.role || job.title || '').toLowerCase();
+            const company = (job.company || '').toLowerCase();
+            const location = (job.location || '').toLowerCase();
+            const skills = Array.isArray(job.skills) ? job.skills : [];
+            const type = (job.type || 'Full-time').toLowerCase();
+
             // Search query match
             const q = searchQuery.toLowerCase().trim();
             const matchesSearch =
                 q === '' ||
-                job.role.toLowerCase().includes(q) ||
-                job.company.toLowerCase().includes(q) ||
-                job.location.toLowerCase().includes(q) ||
-                job.skills.some(skill => skill.toLowerCase().includes(q));
+                role.includes(q) ||
+                company.includes(q) ||
+                location.includes(q) ||
+                skills.some(skill => (skill || '').toLowerCase().includes(q));
 
             if (!matchesSearch) return false;
 
             // Filter pills match
-            if (activeFilter === 'full-time') return job.type.toLowerCase() === 'full-time';
-            if (activeFilter === 'internship') return job.type.toLowerCase() === 'internship';
-            if (activeFilter === 'eligible') return checkEligibility(job.criteria).isEligible;
+            if (activeFilter === 'full-time') return type.includes('full-time');
+            if (activeFilter === 'internship') return type.includes('internship');
+            if (activeFilter === 'eligible') return checkEligibility(job).isEligible;
 
             return true;
         });
@@ -187,7 +229,7 @@ export default function Studentjobs({ user }) {
 
     // Handlers
     const handleOpenApplyModal = (job) => {
-        const eligibility = checkEligibility(job.criteria);
+        const eligibility = checkEligibility(job);
         if (!eligibility.backlogsOk) {
             alert(`Application Blocked: You have ${studentProfile.backlogs} active backlog(s). Students with active backlogs cannot apply for this drive.`);
             return;
@@ -383,8 +425,16 @@ export default function Studentjobs({ user }) {
                     </div>
                 ) : (
                     filteredJobs.map((job) => {
-                        const eligibility = checkEligibility(job.criteria);
+                        const eligibility = checkEligibility(job);
                         const isApplied = appliedJobIds.has(job.id);
+                        const role = job.role || job.title || 'Software Engineer';
+                        const company = job.company || 'Company';
+                        const color = job.color || 'linear-gradient(135deg, #0d9488, #059669)';
+                        const type = job.type || 'Full-time';
+                        const salary = job.salary || 'Competitive';
+                        const location = job.location || 'Bengaluru, India';
+                        const deadline = job.deadline || 'Open';
+                        const skills = Array.isArray(job.skills) ? job.skills : [];
 
                         return (
                             <div key={job.id} className="job-card-wrapper">
@@ -392,47 +442,49 @@ export default function Studentjobs({ user }) {
                                     {/* Top: Brand & Badge */}
                                     <div className="job-card-top">
                                         <div className="job-company-brand">
-                                            <div className="company-logo-avatar" style={{ background: job.color }}>
-                                                {job.company.charAt(0)}
+                                            <div className="company-logo-avatar" style={{ background: color }}>
+                                                {company.charAt(0)}
                                             </div>
                                             <div className="company-name-meta">
-                                                <h3>{job.role}</h3>
+                                                <h3>{role}</h3>
                                                 <span className="company-sub">
-                                                    <Building size={13} /> {job.company}
+                                                    <Building size={13} /> {company}
                                                 </span>
                                             </div>
                                         </div>
-                                        <span className={`job-type-badge ${job.type.toLowerCase() === 'full-time' ? 'full-time' : 'internship'}`}>
-                                            {job.type}
+                                        <span className={`job-type-badge ${type.toLowerCase().includes('full-time') ? 'full-time' : 'internship'}`}>
+                                            {type}
                                         </span>
                                     </div>
 
                                     {/* Meta Snippets (Salary, Location, Deadline) */}
                                     <div className="job-details-snippet">
                                         <div className="snippet-item salary">
-                                            <DollarSign size={14} /> {job.salary}
+                                            <DollarSign size={14} /> {salary}
                                         </div>
                                         <div className="snippet-item">
-                                            <MapPin size={14} /> {job.location}
+                                            <MapPin size={14} /> {location}
                                         </div>
                                         <div className="snippet-item">
-                                            <Calendar size={14} /> Deadline: {job.deadline}
+                                            <Calendar size={14} /> Deadline: {deadline}
                                         </div>
                                     </div>
 
                                     {/* Skills chips */}
-                                    <div className="job-skills-wrap">
-                                        {job.skills.map((skill, idx) => (
-                                            <span key={idx} className="skill-chip">{skill}</span>
-                                        ))}
-                                    </div>
+                                    {skills.length > 0 && (
+                                        <div className="job-skills-wrap">
+                                            {skills.map((skill, idx) => (
+                                                <span key={idx} className="skill-chip">{skill}</span>
+                                            ))}
+                                        </div>
+                                    )}
 
                                     {/* Eligibility status on card */}
                                     <div className={`job-card-eligibility ${eligibility.isEligible ? 'eligible' : 'not-eligible'}`}>
                                         {eligibility.isEligible ? (
                                             <>
                                                 <CheckCircle size={14} />
-                                                <span>You are eligible to apply (Min CGPA: {job.criteria.minCgpa})</span>
+                                                <span>You are eligible to apply (Min CGPA: {eligibility.minCgpa})</span>
                                             </>
                                         ) : (
                                             <>
@@ -490,8 +542,18 @@ export default function Studentjobs({ user }) {
             {/* ── 5. VIEW DETAILS MODAL ─────────────────────────────────────── */}
             {selectedJobForDetails && (() => {
                 const job = selectedJobForDetails;
-                const eligibility = checkEligibility(job.criteria);
+                const eligibility = checkEligibility(job);
                 const isApplied = appliedJobIds.has(job.id);
+                const role = job.role || job.title || 'Software Engineer';
+                const company = job.company || 'Company';
+                const color = job.color || 'linear-gradient(135deg, #0d9488, #059669)';
+                const type = job.type || 'Full-time';
+                const salary = job.salary || 'Competitive';
+                const location = job.location || 'Bengaluru, India';
+                const deadline = job.deadline || 'Open';
+                const skills = Array.isArray(job.skills) ? job.skills : [];
+                const responsibilities = Array.isArray(job.responsibilities) ? job.responsibilities : (typeof job.responsibilities === 'string' ? job.responsibilities.split('\n') : []);
+                const qualifications = Array.isArray(job.qualifications) ? job.qualifications : (typeof job.qualifications === 'string' ? job.qualifications.split('\n') : []);
 
                 return (
                     <div className="modal-backdrop" onClick={() => setSelectedJobForDetails(null)}>
@@ -506,12 +568,12 @@ export default function Studentjobs({ user }) {
                             <div className="modal-scrollable-body">
                                 {/* Company Banner */}
                                 <div className="modal-company-hero">
-                                    <div className="company-logo-avatar" style={{ background: job.color, width: 52, height: 52 }}>
-                                        {job.company.charAt(0)}
+                                    <div className="company-logo-avatar" style={{ background: color, width: 52, height: 52 }}>
+                                        {company.charAt(0)}
                                     </div>
                                     <div>
-                                        <h3>{job.role}</h3>
-                                        <p>{job.company} • {job.location}</p>
+                                        <h3>{role}</h3>
+                                        <p>{company} • {location}</p>
                                     </div>
                                 </div>
 
@@ -519,15 +581,15 @@ export default function Studentjobs({ user }) {
                                 <div className="modal-info-grid">
                                     <div className="modal-info-card">
                                         <span>Employment Type</span>
-                                        <strong>{job.type}</strong>
+                                        <strong>{type}</strong>
                                     </div>
                                     <div className="modal-info-card">
                                         <span>Package / Stipend</span>
-                                        <strong style={{ color: '#059669' }}>{job.salary}</strong>
+                                        <strong style={{ color: '#059669' }}>{salary}</strong>
                                     </div>
                                     <div className="modal-info-card">
                                         <span>Application Deadline</span>
-                                        <strong style={{ color: '#ef4444' }}>{job.deadline}</strong>
+                                        <strong style={{ color: '#ef4444' }}>{deadline}</strong>
                                     </div>
                                 </div>
 
@@ -540,58 +602,66 @@ export default function Studentjobs({ user }) {
                                     <div className="eligibility-criteria-grid">
                                         <div className={`criteria-item ${eligibility.cgpaOk ? 'ok' : 'fail'}`}>
                                             {eligibility.cgpaOk ? <Check size={14} /> : <X size={14} />}
-                                            <span>CGPA: <strong>{studentProfile.cgpa}</strong> (Req: &ge; {job.criteria.minCgpa})</span>
+                                            <span>CGPA: <strong>{studentProfile.cgpa}</strong> (Req: &ge; {eligibility.minCgpa})</span>
                                         </div>
                                         <div className={`criteria-item ${eligibility.branchOk ? 'ok' : 'fail'}`}>
                                             {eligibility.branchOk ? <Check size={14} /> : <X size={14} />}
-                                            <span>Branch: <strong>{studentProfile.branch}</strong> ({job.criteria.eligibleBranches.join(', ')})</span>
+                                            <span>Branch: <strong>{studentProfile.branch}</strong> ({eligibility.eligibleBranches.join(', ')})</span>
                                         </div>
                                         <div className={`criteria-item ${eligibility.backlogsOk ? 'ok' : 'fail'}`}>
                                             {eligibility.backlogsOk ? <Check size={14} /> : <X size={14} />}
-                                            <span>Backlogs: <strong>{studentProfile.backlogs}</strong> (Max allowed: {job.criteria.maxBacklogs})</span>
+                                            <span>Backlogs: <strong>{studentProfile.backlogs}</strong> (Max allowed: {eligibility.maxBacklogs})</span>
                                         </div>
                                         <div className="criteria-item ok">
                                             <Check size={14} />
-                                            <span>Batch: <strong>{job.criteria.graduationYear} Graduates</strong></span>
+                                            <span>Batch: <strong>{eligibility.graduationYear} Graduates</strong></span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Job Description */}
-                                <div>
-                                    <h4 className="modal-section-title">About the Role</h4>
-                                    <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.6 }}>{job.description}</p>
-                                </div>
+                                {job.description && (
+                                    <div>
+                                        <h4 className="modal-section-title">About the Role</h4>
+                                        <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.6 }}>{job.description}</p>
+                                    </div>
+                                )}
 
                                 {/* Key Responsibilities */}
-                                <div>
-                                    <h4 className="modal-section-title">Key Responsibilities</h4>
-                                    <ul className="modal-bullet-list">
-                                        {job.responsibilities.map((resp, i) => (
-                                            <li key={i}>{resp}</li>
-                                        ))}
-                                    </ul>
-                                </div>
+                                {responsibilities.length > 0 && (
+                                    <div>
+                                        <h4 className="modal-section-title">Key Responsibilities</h4>
+                                        <ul className="modal-bullet-list">
+                                            {responsibilities.map((resp, i) => (
+                                                <li key={i}>{resp}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
 
                                 {/* Qualifications & Requirements */}
-                                <div>
-                                    <h4 className="modal-section-title">Qualifications & Skill Requirements</h4>
-                                    <ul className="modal-bullet-list">
-                                        {job.qualifications.map((qual, i) => (
-                                            <li key={i}>{qual}</li>
-                                        ))}
-                                    </ul>
-                                </div>
+                                {qualifications.length > 0 && (
+                                    <div>
+                                        <h4 className="modal-section-title">Qualifications & Skill Requirements</h4>
+                                        <ul className="modal-bullet-list">
+                                            {qualifications.map((qual, i) => (
+                                                <li key={i}>{qual}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
 
                                 {/* Skills Tags */}
-                                <div>
-                                    <h4 className="modal-section-title">Required Technical Skills</h4>
-                                    <div className="job-skills-wrap">
-                                        {job.skills.map((skill, idx) => (
-                                            <span key={idx} className="skill-chip">{skill}</span>
-                                        ))}
+                                {skills.length > 0 && (
+                                    <div>
+                                        <h4 className="modal-section-title">Required Technical Skills</h4>
+                                        <div className="job-skills-wrap">
+                                            {skills.map((skill, idx) => (
+                                                <span key={idx} className="skill-chip">{skill}</span>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                             <div className="modal-footer-custom">
