@@ -1,11 +1,17 @@
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+dotenv.config();
 
+
+import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 
 
 const app = express();
 const port = 5000;
+connectDB();
+
 app.use(cors({
     origin: 'http://localhost:5173',
 }));
@@ -14,7 +20,7 @@ app.use(express.json());
 app.listen(port,()=>{
     console.log(`Server is running on port ${port}`);
     console.log(`http://localhost:${port}`)
-})
+}) 
 
 
 app.use('/api/auth', authRoutes);
