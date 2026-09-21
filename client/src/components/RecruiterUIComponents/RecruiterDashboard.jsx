@@ -8,7 +8,7 @@ import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterDashboard.css';
 
-export default function RecruiterDashboard({ onNavigate, onPostJob, onScheduleInterview }) {
+export default function RecruiterDashboard({ user, onNavigate, onPostJob, onScheduleInterview }) {
     const [stats, setStats] = useState({
         activeJobs: 0,
         totalApplicants: 0,
@@ -24,7 +24,7 @@ export default function RecruiterDashboard({ onNavigate, onPostJob, onScheduleIn
 
     const loadData = async () => {
         try {
-            const data = await recruiterService.getDashboardStats();
+            const data = await recruiterService.getDashboardStats({ recruiterEmail: user?.email });
             setStats(data);
         } catch (e) {
             console.error('Failed to load recruiter stats:', e);
@@ -46,24 +46,16 @@ export default function RecruiterDashboard({ onNavigate, onPostJob, onScheduleIn
         };
     }, []);
 
-    const handleViewCandidate = (app) => {
-        const cand = recruiterService.getCandidateById(app.candidateId) || {
-            id: app.candidateId,
-            name: app.candidateName,
-            email: `${app.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-            branch: app.candidateBranch,
-            cgpa: app.candidateCgpa,
-            skills: app.candidateSkills || ['General Aptitude', 'Communication'],
-            resumeName: app.candidateResume || `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`,
-            projects: [],
-            experience: []
-        };
+    const handleViewCandidate = async (app) => {
+        const email = app.studentEmail || app.candidateEmail;
+        const cand = await recruiterService.getCandidateProfile(email, app);
         setSelectedCandidate(cand);
         setSelectedApplication(app);
     };
 
     const handleStatusChange = async (appId, newStatus) => {
-        await recruiterService.updateApplicationStatus(appId, newStatus);
+        const targetId = appId?._id || appId?.id || appId;
+        await recruiterService.updateApplicationStatus(targetId, newStatus);
         setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
         loadData();
     };

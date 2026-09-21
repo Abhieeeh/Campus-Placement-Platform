@@ -8,7 +8,7 @@ import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterInterviews.css';
 
-export default function RecruiterInterviews({ initialScheduleTarget, onScheduleHandled }) {
+export default function RecruiterInterviews({ user, initialScheduleTarget, onScheduleHandled }) {
     const [interviews, setInterviews] = useState([]);
     const [applications, setApplications] = useState([]);
     const [jobs, setJobs] = useState([]);
@@ -23,7 +23,7 @@ export default function RecruiterInterviews({ initialScheduleTarget, onScheduleH
         candidateCgpa: 8.5,
         jobId: '',
         jobTitle: '',
-        company: 'TechCorp Solutions',
+        company: 'Company',
         date: '2026-09-28',
         displayDate: '28 Sep 2026',
         time: '11:00 AM - 12:00 PM IST',
@@ -44,10 +44,11 @@ export default function RecruiterInterviews({ initialScheduleTarget, onScheduleH
 
     const loadData = async () => {
         try {
+            const params = user?.email ? { recruiterEmail: user.email } : {};
             const [intList, appList, jList] = await Promise.all([
-                recruiterService.getInterviews(),
-                recruiterService.getApplications(),
-                recruiterService.getJobs()
+                recruiterService.getInterviews(params),
+                recruiterService.getApplications(params),
+                recruiterService.getJobs(params)
             ]);
             setInterviews(intList);
             setApplications(appList);
@@ -66,22 +67,25 @@ export default function RecruiterInterviews({ initialScheduleTarget, onScheduleH
             window.removeEventListener('recruiter_interviews_updated', loadData);
             window.removeEventListener('recruiter_applications_updated', loadData);
         };
-    }, []);
+    }, [user?.email]);
 
     // If passed target from another screen (like shortlist or applications)
     useEffect(() => {
         if (initialScheduleTarget) {
             const { candidate, application } = initialScheduleTarget;
+            const sEmail = candidate?.email || application?.studentEmail || application?.candidateEmail || '';
             setScheduleForm(prev => ({
                 ...prev,
-                candidateId: candidate.id || '',
-                candidateName: candidate.name || '',
-                candidateBranch: candidate.branch || 'CSE',
-                candidateCgpa: candidate.cgpa || 8.0,
+                candidateId: candidate?.id || candidate?._id || application?.candidateId || 'STU-001',
+                candidateName: candidate?.name || application?.candidateName || 'Student Candidate',
+                candidateEmail: sEmail,
+                studentEmail: sEmail,
+                candidateBranch: candidate?.branch || application?.candidateBranch || 'CSE',
+                candidateCgpa: candidate?.cgpa !== undefined ? candidate.cgpa : (application?.candidateCgpa || 8.0),
                 jobId: application?.jobId || '',
-                jobTitle: application?.jobTitle || 'Software Engineer',
-                company: application?.company || 'TechCorp Solutions',
-                applicationId: application?.id || ''
+                jobTitle: application?.jobTitle || application?.role || 'Software Engineer',
+                company: application?.company || 'Company',
+                applicationId: application?._id || application?.id || ''
             }));
             setShowScheduleModal(true);
             if (onScheduleHandled) onScheduleHandled();
@@ -90,37 +94,44 @@ export default function RecruiterInterviews({ initialScheduleTarget, onScheduleH
 
     const handleOpenScheduleModal = () => {
         const firstApp = applications[0];
+        const sEmail = firstApp ? (firstApp.studentEmail || firstApp.candidateEmail || '') : '';
         setScheduleForm({
-            candidateId: firstApp ? firstApp.candidateId : 'STU-001',
-            candidateName: firstApp ? firstApp.candidateName : 'Rahul Sharma',
+            candidateId: firstApp ? (firstApp.candidateId || firstApp._id || firstApp.id) : 'STU-001',
+            candidateName: firstApp ? firstApp.candidateName : 'Student Candidate',
+            candidateEmail: sEmail,
+            studentEmail: sEmail,
             candidateBranch: firstApp ? firstApp.candidateBranch : 'CSE',
             candidateCgpa: firstApp ? firstApp.candidateCgpa : 8.5,
-            jobId: firstApp ? firstApp.jobId : (jobs[0]?.id || 'job-1'),
-            jobTitle: firstApp ? firstApp.jobTitle : (jobs[0]?.role || 'Software Engineer'),
-            company: 'TechCorp Solutions',
-            date: '2026-09-28',
-            displayDate: '28 Sep 2026',
+            jobId: firstApp ? firstApp.jobId : (jobs[0]?.id || jobs[0]?._id || ''),
+            jobTitle: firstApp ? (firstApp.jobTitle || firstApp.role) : (jobs[0]?.role || 'Software Engineer'),
+            company: firstApp?.company || jobs[0]?.company || 'Company',
+            date: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+            displayDate: 'Upcoming',
             time: '11:00 AM - 12:00 PM IST',
-            round: 'Technical Round 1',
+            round: 'Technical Round 1 (DSA & Problem Solving)',
             platform: 'Google Meet',
             meetLink: 'https://meet.google.com/xyz-recruiter-demo',
-            applicationId: firstApp ? firstApp.id : ''
+            applicationId: firstApp ? (firstApp._id || firstApp.id) : ''
         });
         setShowScheduleModal(true);
     };
 
     const handleCandidateSelect = (candId) => {
-        const app = applications.find(a => a.candidateId === candId) || applications[0];
+        const app = applications.find(a => (a.candidateId === candId || a.id === candId || a._id === candId)) || applications[0];
         if (app) {
+            const sEmail = app.studentEmail || app.candidateEmail || '';
             setScheduleForm(prev => ({
                 ...prev,
-                candidateId: app.candidateId,
+                candidateId: app.candidateId || app._id || app.id,
                 candidateName: app.candidateName,
+                candidateEmail: sEmail,
+                studentEmail: sEmail,
                 candidateBranch: app.candidateBranch,
                 candidateCgpa: app.candidateCgpa,
                 jobId: app.jobId,
-                jobTitle: app.jobTitle,
-                applicationId: app.id
+                jobTitle: app.jobTitle || app.role,
+                company: app.company,
+                applicationId: app._id || app.id
             }));
         }
     };
@@ -136,6 +147,7 @@ export default function RecruiterInterviews({ initialScheduleTarget, onScheduleH
 
         await recruiterService.scheduleInterview({
             ...scheduleForm,
+            recruiterEmail: user?.email || '',
             displayDate
         });
 

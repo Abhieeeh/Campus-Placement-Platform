@@ -9,11 +9,19 @@ import StudentProfileSetup from './components/StudentProfileSetup';
 import RecruiterProfileSetup from './components/RecruiterProfileSetup';
 import { GraduationCap, Briefcase } from 'lucide-react';
 
+function nameFromEmail(email = '') {
+  return email
+    .split('@')[0]
+    .replace(/[._-]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function App() {
-  const [role, setRole] = useState('student');   // 'student' | 'recruiter'
-  const [mode, setMode] = useState('login');     // 'login' | 'register' | 'setup-student-profile' | 'setup-recruiter-profile'
-  const [user, setUser] = useState(null);        // null = not logged in
-  const [pendingUser, setPendingUser] = useState(null); // newly registered user awaiting profile setup
+  const [role, setRole] = useState('student');
+  const [mode, setMode] = useState('login');
+  const [user, setUser] = useState(null); 
+  const [error, setError] = useState(null);
+  const [pendingUser, setPendingUser] = useState(null);
   const [prefilledEmail, setPrefilledEmail] = useState('');
   const [authNotification, setAuthNotification] = useState('');
 
@@ -27,11 +35,20 @@ export default function App() {
         body: JSON.stringify(userData)
       });
       const data = await response.json().catch(() => ({}));
-      console.log('Login response:', data);
+      if (response.ok && data.token) {
+        localStorage.setItem('authToken', data.token);
+
+        window.dispatchEvent(new Event('student_profile_updated'));
+        window.dispatchEvent(new Event('recruiter_profile_updated'));
+
+        setError(null);
+        setUser(data.user);
+      } else {
+        setError(data.message || 'Login failed. Please check your credentials.');
+      }
     } catch (err) {
-      console.error('Login network error:', err);
+      setError('Login failed. Please try again.');
     }
-    setUser(userData);
   }
 
   async function handleRegister(userData) {
@@ -43,53 +60,59 @@ export default function App() {
         },
         body: JSON.stringify(userData)
       });
-      const data = await response.json().catch(() => ({}));
-      console.log('Register response:', data);
-    } catch (err) {
-      console.error('Register network error:', err);
-    }
+      const data = await response.json();
+      if (response.status === 201) {
+        localStorage.setItem('authToken', data.token);
 
-    // Save pending registered user info
-    setPendingUser(userData);
-    // Redirect exclusively to the role-specific profile setup page
-    if (userData.role === 'recruiter') {
-      setMode('setup-recruiter-profile');
-    } else {
-      setMode('setup-student-profile');
+        setError(null);
+        setPendingUser(userData);
+        if (userData.role === 'recruiter') {
+          setMode('setup-recruiter-profile');
+        } else {
+          setMode('setup-student-profile');
+        }
+      } else {
+        setError(data.message || 'Registration failed. Please try again.');
+      }
+    } catch (err) {
+      setError('Registration failed. Please try again.');
     }
   }
 
-  function handleProfileComplete({ role: completedRole, email, message }) {
-    setRole(completedRole);
-    setPrefilledEmail(email);
-    setAuthNotification(message || 'Profile setup complete! Please sign in with your credentials.');
+  function handleProfileComplete({ role: completedRole, email }) {
+    setUser({ email, role: completedRole });
     setPendingUser(null);
-    setMode('login');
+    setError(null);
+    setAuthNotification('');
   }
 
   function handleLogout() {
+    localStorage.removeItem('authToken');
+    window.dispatchEvent(new Event('student_profile_updated'));
+    window.dispatchEvent(new Event('recruiter_profile_updated'));
+
     setUser(null);
     setPendingUser(null);
     setPrefilledEmail('');
     setAuthNotification('');
+    setError(null);
     setMode('login');
   }
 
   function handleRoleChange(newRole) {
     setRole(newRole);
+    setError(null);
     setAuthNotification('');
   }
 
   const isRecruiter = role === 'recruiter';
 
-  // 1. If user is logged in, show the respective dashboard
   if (user) {
     return user.role === 'recruiter'
       ? <RecruiterUI user={user} onLogout={handleLogout} />
       : <StudentUI user={user} onLogout={handleLogout} />;
   }
 
-  // 2. If new student just registered, show Student Profile Onboarding
   if (mode === 'setup-student-profile') {
     return (
       <StudentProfileSetup
@@ -99,7 +122,6 @@ export default function App() {
     );
   }
 
-  // 3. If new recruiter just registered, show Recruiter Profile Onboarding
   if (mode === 'setup-recruiter-profile') {
     return (
       <RecruiterProfileSetup
@@ -109,13 +131,11 @@ export default function App() {
     );
   }
 
-  // 4. Default Auth Flow (Login & Register)
   return (
     <div className="app-container">
       <Navbar role={role} />
       <main className="main-content">
         <div className="auth-card">
-          {/* Role Tabs: Student / Recruiter */}
           <div className="role-tabs" role="tablist" aria-label="Select role">
             <button
               id="tab-student"
@@ -139,7 +159,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Card Header */}
           <div className="card-header">
             <h1 className="card-title">
               {mode === 'login' ? 'Welcome back!' : 'Create account'}
@@ -152,14 +171,13 @@ export default function App() {
             </p>
           </div>
 
-          {/* Mode Toggle: Login / Register */}
           <div className="mode-toggle" role="tablist" aria-label="Auth mode">
             <button
               id="mode-login"
               role="tab"
               aria-selected={mode === 'login'}
               className={`mode-btn ${mode === 'login' ? `active ${isRecruiter ? 'recruiter-mode' : 'student-mode'}` : ''}`}
-              onClick={() => { setMode('login'); setAuthNotification(''); }}
+              onClick={() => { setMode('login'); setError(null); setAuthNotification(''); }}
             >
               Sign In
             </button>
@@ -168,28 +186,28 @@ export default function App() {
               role="tab"
               aria-selected={mode === 'register'}
               className={`mode-btn ${mode === 'register' ? `active ${isRecruiter ? 'recruiter-mode' : 'student-mode'}` : ''}`}
-              onClick={() => { setMode('register'); setAuthNotification(''); }}
+              onClick={() => { setMode('register'); setError(null); setAuthNotification(''); }}
             >
               Register
             </button>
           </div>
 
-          {/* Form */}
           {mode === 'login' ? (
             <LoginForm
               role={role}
               onLogin={handleLogin}
               initialEmail={prefilledEmail}
               successMessage={authNotification}
+              serverError={error}
             />
           ) : (
             <RegisterForm
               role={role}
               onRegister={handleRegister}
+              serverError={error}
             />
           )}
 
-          {/* Footer switcher */}
           <div className="card-footer">
             {mode === 'login' ? (
               <>
@@ -208,7 +226,7 @@ export default function App() {
                 <button
                   id="switch-to-login"
                   className={`switch-link ${isRecruiter ? 'recruiter-text' : ''}`}
-                  onClick={() => { setMode('login'); setAuthNotification(''); }}
+                  onClick={() => { setMode('login'); setError(null); setAuthNotification(''); }}
                 >
                   Sign in
                 </button>
@@ -220,4 +238,3 @@ export default function App() {
     </div>
   );
 }
-

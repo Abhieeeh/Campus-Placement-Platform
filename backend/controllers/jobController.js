@@ -1,78 +1,107 @@
-// In-memory data store (ready to be replaced with MongoDB Mongoose model)
-let jobs = [];
+import Job from "../models/job.js";
 
-export const getJobs = (req, res) => {
+// Get all jobs (with optional query filters)
+export const getJobs = async (req, res) => {
     try {
-        const { search, type } = req.query;
-        let filtered = [...jobs];
+        const { search, type, recruiterEmail } = req.query;
+        let query = {};
+
+        if (recruiterEmail) {
+            query.recruiterEmail = recruiterEmail;
+        }
+
+        if (type && type !== 'all' && type !== 'All') {
+            query.type = { $regex: new RegExp(type, 'i') };
+        }
 
         if (search) {
-            const q = search.toLowerCase().trim();
-            filtered = filtered.filter(j =>
-                (j.role || j.title || '').toLowerCase().includes(q) ||
-                (j.company || '').toLowerCase().includes(q) ||
-                (j.location || '').toLowerCase().includes(q) ||
-                (Array.isArray(j.skills) && j.skills.some(s => (s || '').toLowerCase().includes(q)))
-            );
+            const regex = new RegExp(search.trim(), 'i');
+            query.$or = [
+                { role: regex },
+                { title: regex },
+                { company: regex },
+                { location: regex },
+                { skills: regex }
+            ];
         }
 
-        if (type && type !== 'all') {
-            filtered = filtered.filter(j => (j.type || '').toLowerCase() === type.toLowerCase());
-        }
-
-        res.status(200).json(filtered);
+        const jobs = await Job.find(query).sort({ createdAt: -1 });
+        res.status(200).json(jobs);
     } catch (error) {
+        console.error('Error fetching jobs:', error);
         res.status(500).json({ message: 'Failed to retrieve jobs', error: error.message });
     }
 };
 
-export const getJobById = (req, res) => {
+// Get jobs posted by a specific recruiter via route parameter
+export const getJobsByRecruiter = async (req, res) => {
+    try {
+        const { email } = req.params;
+        const jobs = await Job.find({ recruiterEmail: email }).sort({ createdAt: -1 });
+        res.status(200).json(jobs);
+    } catch (error) {
+        console.error('Error fetching recruiter jobs:', error);
+        res.status(500).json({ message: 'Failed to retrieve jobs for recruiter', error: error.message });
+    }
+};
+
+// Get single job by ID
+export const getJobById = async (req, res) => {
     try {
         const { id } = req.params;
-        const job = jobs.find(j => (j.id === id || j._id === id));
+        const job = await Job.findById(id);
         if (!job) {
             return res.status(404).json({ message: 'Job posting not found' });
         }
         res.status(200).json(job);
     } catch (error) {
+        console.error('Error fetching job details:', error);
         res.status(500).json({ message: 'Failed to retrieve job details', error: error.message });
     }
 };
 
-export const createJob = (req, res) => {
+// Create a new job posting
+export const createJob = async (req, res) => {
     try {
-        const newJob = {
-            id: `job-${Date.now()}`,
-            postedDate: 'Just now',
-            ...req.body
+        const jobData = {
+            ...req.body,
+            role: req.body.role || req.body.title || 'Software Engineer',
+            postedDate: 'Just now'
         };
-        jobs.unshift(newJob);
+        const newJob = await Job.create(jobData);
         res.status(201).json(newJob);
     } catch (error) {
+        console.error('Error creating job:', error);
         res.status(500).json({ message: 'Failed to create job posting', error: error.message });
     }
 };
 
-export const updateJob = (req, res) => {
+// Update job posting by ID
+export const updateJob = async (req, res) => {
     try {
         const { id } = req.params;
-        const idx = jobs.findIndex(j => (j.id === id || j._id === id));
-        if (idx === -1) {
+        const updatedJob = await Job.findByIdAndUpdate(id, req.body, { new: true });
+        if (!updatedJob) {
             return res.status(404).json({ message: 'Job not found' });
         }
-        jobs[idx] = { ...jobs[idx], ...req.body };
-        res.status(200).json(jobs[idx]);
+        res.status(200).json(updatedJob);
     } catch (error) {
+        console.error('Error updating job posting:', error);
         res.status(500).json({ message: 'Failed to update job posting', error: error.message });
     }
 };
 
-export const deleteJob = (req, res) => {
+// Delete job posting by ID
+export const deleteJob = async (req, res) => {
     try {
         const { id } = req.params;
-        jobs = jobs.filter(j => (j.id !== id && j._id !== id));
+        const deleted = await Job.findByIdAndDelete(id);
+        if (!deleted) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
         res.status(200).json({ message: 'Job posting removed successfully', id });
     } catch (error) {
+        console.error('Error deleting job posting:', error);
         res.status(500).json({ message: 'Failed to delete job posting', error: error.message });
     }
 };

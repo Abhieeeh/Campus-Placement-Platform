@@ -2,10 +2,10 @@
  * Placement Platform Unified API Service (Student Facing)
  * 
  * Direct REST API client communicating with Express/MongoDB backend endpoints.
- * All dummy and mock data removed.
+ * Uses route parameters for clean, RESTful requests.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 /** Helper for JSON fetch requests */
 async function apiRequest(endpoint, options = {}) {
@@ -25,7 +25,7 @@ async function apiRequest(endpoint, options = {}) {
         }
         return await res.json();
     } catch (err) {
-        console.error(`API Error [${endpoint}]:`, err.message);
+        console.error(`Placement API Error [${endpoint}]:`, err.message);
         throw err;
     }
 }
@@ -49,8 +49,8 @@ export const placementService = {
 
     // ── Applications ─────────────────────────────────────────────────────
     async getApplications(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const endpoint = `/applications${query ? `?${query}` : ''}`;
+        const email = typeof params === 'string' ? params : params?.studentEmail;
+        const endpoint = email ? `/applications/by-student/${encodeURIComponent(email)}` : '/applications';
         try {
             const data = await apiRequest(endpoint);
             return Array.isArray(data) ? data : [];
@@ -62,7 +62,6 @@ export const placementService = {
     async applyToJob(job, studentProfile, newResume) {
         const payload = {
             jobId: job?.id || job?._id,
-            job,
             studentProfile,
             newResume
         };
@@ -71,6 +70,7 @@ export const placementService = {
             body: JSON.stringify(payload)
         });
         window.dispatchEvent(new Event('student_applications_updated'));
+        window.dispatchEvent(new Event('recruiter_applications_updated'));
         return res;
     },
 
@@ -88,13 +88,26 @@ export const placementService = {
             method: 'DELETE'
         });
         window.dispatchEvent(new Event('student_applications_updated'));
+        window.dispatchEvent(new Event('recruiter_applications_updated'));
         return res;
+    },
+
+    // ── Shortlists ───────────────────────────────────────────────────────
+    async getShortlists(params = {}) {
+        const email = typeof params === 'string' ? params : params?.studentEmail;
+        const endpoint = email ? `/shortlists/by-student/${encodeURIComponent(email)}` : '/shortlists';
+        try {
+            const data = await apiRequest(endpoint);
+            return Array.isArray(data) ? data : [];
+        } catch (e) {
+            return [];
+        }
     },
 
     // ── Interviews ───────────────────────────────────────────────────────
     async getInterviews(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const endpoint = `/interviews${query ? `?${query}` : ''}`;
+        const email = typeof params === 'string' ? params : params?.studentEmail;
+        const endpoint = email ? `/interviews/by-student/${encodeURIComponent(email)}` : '/interviews';
         try {
             const data = await apiRequest(endpoint);
             return Array.isArray(data) ? data : [];
@@ -138,17 +151,18 @@ export const placementService = {
     },
 
     // ── Dashboard Aggregated Data ────────────────────────────────────────
-    async getDashboardData() {
+    async getDashboardData(params = {}) {
+        const email = typeof params === 'string' ? params : params?.studentEmail;
+        const endpoint = email ? `/dashboard/stats/student/${encodeURIComponent(email)}` : '/dashboard/stats';
         try {
-            const data = await apiRequest('/dashboard/stats');
+            const data = await apiRequest(endpoint);
             return data;
         } catch (e) {
-            // Compute safely from endpoints if single aggregation endpoint not yet wired
             try {
                 const [jobs, apps, interviews] = await Promise.all([
                     this.getJobs(),
-                    this.getApplications(),
-                    this.getInterviews()
+                    this.getApplications(params),
+                    this.getInterviews(params)
                 ]);
 
                 return {
@@ -158,7 +172,7 @@ export const placementService = {
                         interviews: interviews.filter(i => (i.status || '').toLowerCase() === 'upcoming' || (i.status || '').toLowerCase() === 'scheduled').length
                     },
                     recentApplications: apps.slice(0, 4),
-                    recommendedJobs: jobs.slice(0, 4)
+                    recommendedJobs: jobs.filter(j => j.status !== 'Inactive' && j.status !== 'Closed').slice(0, 4)
                 };
             } catch (err) {
                 return {

@@ -78,29 +78,23 @@ export default function RecruiterProfileSetup({ initialUser, onComplete }) {
         };
 
         try {
-            // 1. Send to backend endpoint for database persistence
             await fetch('http://localhost:5000/api/auth/recruiter-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            // 2. Update recruiterService cache
-            await recruiterService.updateCompanyProfile(formData);
+            window.dispatchEvent(new Event('recruiter_profile_updated'));
 
-            // 3. Complete onboarding and redirect to Login
             onComplete({
                 role: 'recruiter',
-                email: userEmail || formData.email,
-                message: 'Company profile created successfully! Please sign in to access your recruitment portal.'
+                email: userEmail || formData.email
             });
         } catch (error) {
             console.error('Failed to save recruiter profile:', error);
-            await recruiterService.updateCompanyProfile(formData);
             onComplete({
                 role: 'recruiter',
-                email: userEmail || formData.email,
-                message: 'Company profile saved! Please sign in.'
+                email: userEmail || formData.email
             });
         } finally {
             setIsSubmitting(false);
@@ -312,7 +306,7 @@ export default function RecruiterProfileSetup({ initialUser, onComplete }) {
                                 className="rps-btn rps-btn-primary"
                                 disabled={isSubmitting}
                             >
-                                {isSubmitting ? 'Saving Profile...' : 'Complete Profile & Continue to Login'}
+                                {isSubmitting ? 'Saving Profile...' : 'Complete Profile & Launch Portal'}
                                 {!isSubmitting && <CheckCircle2 size={16} />}
                             </button>
                         </div>

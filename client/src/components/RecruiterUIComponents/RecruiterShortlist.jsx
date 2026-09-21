@@ -7,7 +7,7 @@ import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterShortlist.css';
 
-export default function RecruiterShortlist({ onScheduleInterview }) {
+export default function RecruiterShortlist({ user, onScheduleInterview }) {
     const [shortlistedApps, setShortlistedApps] = useState([]);
     const [jobs, setJobs] = useState([]);
     const [selectedJob, setSelectedJob] = useState('All');
@@ -20,10 +20,12 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
     const loadData = async () => {
         try {
             const [apps, jList] = await Promise.all([
-                recruiterService.getShortlisted(),
-                recruiterService.getJobs()
+                recruiterService.getApplications({ recruiterEmail: user?.email }),
+                recruiterService.getJobs({ recruiterEmail: user?.email })
             ]);
-            setShortlistedApps(apps);
+            // Shortlist pool = Shortlisted + Interview only (not Offered — they've moved on)
+            const shortlistPool = apps.filter(a => ['Shortlisted', 'Interview'].includes(a.status));
+            setShortlistedApps(shortlistPool);
             setJobs(jList);
         } catch (e) {
             console.error('Failed to load shortlist:', e);
@@ -41,24 +43,16 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
         };
     }, []);
 
-    const handleViewCandidate = (app) => {
-        const cand = recruiterService.getCandidateById(app.candidateId) || {
-            id: app.candidateId,
-            name: app.candidateName,
-            email: `${app.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-            branch: app.candidateBranch,
-            cgpa: app.candidateCgpa,
-            skills: app.candidateSkills || ['General Aptitude'],
-            resumeName: app.candidateResume || `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`,
-            projects: [],
-            experience: []
-        };
+    const handleViewCandidate = async (app) => {
+        const email = app.studentEmail || app.candidateEmail;
+        const cand = await recruiterService.getCandidateProfile(email, app);
         setSelectedCandidate(cand);
         setSelectedApplication(app);
     };
 
     const handleStatusChange = async (appId, newStatus) => {
-        await recruiterService.updateApplicationStatus(appId, newStatus);
+        const targetId = appId?._id || appId?.id || appId;
+        await recruiterService.updateApplicationStatus(targetId, newStatus);
         setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
         loadData();
     };
@@ -78,9 +72,9 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
         return acc;
     }, {});
 
-    const totalShortlisted = shortlistedApps.length;
+    const totalShortlisted = shortlistedApps.filter(a => a.status === 'Shortlisted').length;
     const inInterview = shortlistedApps.filter(a => a.status === 'Interview').length;
-    const offered = shortlistedApps.filter(a => a.status === 'Offered').length;
+    const totalInPool = shortlistedApps.length; // Shortlisted + Interview
 
     return (
         <div className="rsl-container">
@@ -92,16 +86,16 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
                 </div>
                 <div className="rsl-hero-stats">
                     <div className="rsl-hstat">
+                        <div className="rsl-hstat-num">{totalInPool}</div>
+                        <div className="rsl-hstat-lbl">In Pool</div>
+                    </div>
+                    <div className="rsl-hstat">
                         <div className="rsl-hstat-num">{totalShortlisted}</div>
-                        <div className="rsl-hstat-lbl">In Shortlist</div>
+                        <div className="rsl-hstat-lbl">Shortlisted</div>
                     </div>
                     <div className="rsl-hstat">
                         <div className="rsl-hstat-num">{inInterview}</div>
                         <div className="rsl-hstat-lbl">Interviewing</div>
-                    </div>
-                    <div className="rsl-hstat">
-                        <div className="rsl-hstat-num">{offered}</div>
-                        <div className="rsl-hstat-lbl">Offers Made</div>
                     </div>
                 </div>
             </div>
@@ -126,7 +120,7 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
                         value={selectedJob}
                         onChange={e => setSelectedJob(e.target.value)}
                     >
-                        <option value="All">All Drives ({shortlistedApps.length})</option>
+                    <option value="All">All Drives ({shortlistedApps.length})</option>
                         {jobs.map(j => (
                             <option key={j.id} value={j.id}>{j.role || j.title}</option>
                         ))}
@@ -199,14 +193,9 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
                                                             <button
                                                                 className="ra-btn-primary"
                                                                 style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-                                                                onClick={() => {
-                                                                    const cand = recruiterService.getCandidateById(app.candidateId) || {
-                                                                        id: app.candidateId,
-                                                                        name: app.candidateName,
-                                                                        email: `${app.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-                                                                        branch: app.candidateBranch,
-                                                                        cgpa: app.candidateCgpa
-                                                                    };
+                                                                onClick={async () => {
+                                                                    const email = app.studentEmail || app.candidateEmail;
+                                                                    const cand = await recruiterService.getCandidateProfile(email, app);
                                                                     if (onScheduleInterview) onScheduleInterview(cand, app);
                                                                 }}
                                                             >
@@ -218,7 +207,7 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
                                                             <button
                                                                 className="rcp-btn offer"
                                                                 style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-                                                                onClick={() => handleStatusChange(app.id, 'Offered')}
+                                                                onClick={() => handleStatusChange(app._id || app.id, 'Offered')}
                                                             >
                                                                 <Gift size={13} /> Extend Offer
                                                             </button>
@@ -228,7 +217,7 @@ export default function RecruiterShortlist({ onScheduleInterview }) {
                                                             className="ra-btn-reject"
                                                             style={{ padding: '0.35rem 0.55rem' }}
                                                             title="Remove from shortlist"
-                                                            onClick={() => handleStatusChange(app.id, 'Rejected')}
+                                                            onClick={() => handleStatusChange(app._id || app.id, 'Rejected')}
                                                         >
                                                             <XCircle size={14} />
                                                         </button>
