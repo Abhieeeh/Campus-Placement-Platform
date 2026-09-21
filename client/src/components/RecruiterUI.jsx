@@ -259,6 +259,7 @@ export default function RecruiterUI({ user, onLogout }) {
                     <div className="rec-page-body">
                         {activePage === 'recruiterdashboard' && (
                             <RecruiterDashboard
+                                user={user}
                                 onNavigate={setActivePage}
                                 onPostJob={handleQuickPostJob}
                                 onScheduleInterview={handleScheduleInterview}
@@ -274,22 +275,26 @@ export default function RecruiterUI({ user, onLogout }) {
                         )}
                         {activePage === 'recruiterapplications' && (
                             <RecruiterApplications
+                                user={user}
                                 onScheduleInterview={handleScheduleInterview}
                             />
                         )}
                         {activePage === 'recruitershortlist' && (
                             <RecruiterShortlist
+                                user={user}
                                 onScheduleInterview={handleScheduleInterview}
                             />
                         )}
                         {activePage === 'recruiterinterviews' && (
                             <RecruiterInterviews
+                                user={user}
                                 initialScheduleTarget={scheduleInterviewTarget}
                                 onScheduleHandled={() => setScheduleInterviewTarget(null)}
                             />
                         )}
                         {activePage === 'recruiternotifications' && (
                             <RecruiterNotifications
+                                user={user}
                                 onNavigate={setActivePage}
                             />
                         )}
@@ -299,7 +304,7 @@ export default function RecruiterUI({ user, onLogout }) {
                             />
                         )}
                         {activePage === 'recruitersettings' && (
-                            <RecruiterSettings />
+                            <RecruiterSettings user={user} />
                         )}
                     </div>
                 </main>

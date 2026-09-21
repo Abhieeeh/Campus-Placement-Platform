@@ -8,14 +8,15 @@ import {
 import { placementService } from '../../services/placementService';
 import './Studentapplication.css';
 
-export default function Studentapplication() {
+export default function Studentapplication({ user }) {
     // Load applications dynamically via placementService
     const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const loadApplications = async () => {
         try {
-            const data = await placementService.getApplications();
+            const params = user?.email ? { studentEmail: user.email } : {};
+            const data = await placementService.getApplications(params);
             setApplications(data);
         } catch (e) {
             // fallback
@@ -27,40 +28,22 @@ export default function Studentapplication() {
     useEffect(() => {
         loadApplications();
         window.addEventListener('student_applications_updated', loadApplications);
+        window.addEventListener('recruiter_applications_updated', loadApplications);
         window.addEventListener('storage', loadApplications);
         return () => {
             window.removeEventListener('student_applications_updated', loadApplications);
+            window.removeEventListener('recruiter_applications_updated', loadApplications);
             window.removeEventListener('storage', loadApplications);
         };
-    }, []);
+    }, [user?.email]);
 
-    // Listen to updates from other tabs / components
+    // Keep open modal in sync when the underlying applications list refreshes
     useEffect(() => {
-        const syncApplications = () => {
-            const saved = localStorage.getItem('student_applications');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed)) setApplications(parsed);
-                } catch (e) {
-                    // fallback
-                }
-            }
-        };
-        window.addEventListener('student_applications_updated', syncApplications);
-        window.addEventListener('storage', syncApplications);
-        return () => {
-            window.removeEventListener('student_applications_updated', syncApplications);
-            window.removeEventListener('storage', syncApplications);
-        };
-    }, []);
-
-    // Save applications to localStorage whenever changed
-    const updateAndPersistApplications = (newApps) => {
-        setApplications(newApps);
-        localStorage.setItem('student_applications', JSON.stringify(newApps));
-        window.dispatchEvent(new Event('student_applications_updated'));
-    };
+        if (selectedApp) {
+            const fresh = applications.find(a => (a._id || a.id) === (selectedApp._id || selectedApp.id));
+            if (fresh) setSelectedApp(fresh);
+        }
+    }, [applications]);
 
     // Search and filter states
     const [searchQuery, setSearchQuery] = useState('');
@@ -70,29 +53,38 @@ export default function Studentapplication() {
     const [selectedApp, setSelectedApp] = useState(null);
 
     // Toggle Saved / Bookmark
-    const handleToggleSave = (appId, e) => {
+    const handleToggleSave = async (appId, e) => {
         e?.stopPropagation();
-        const updated = applications.map(app => {
-            if (app.id === appId) {
-                const nextSaved = !app.isSaved;
-                // If it was only in saved status, update status appropriately
-                return {
-                    ...app,
-                    isSaved: nextSaved,
-                    status: app.status === 'Saved' && !nextSaved ? 'Applied' : app.status
-                };
-            }
-            return app;
-        });
-        updateAndPersistApplications(updated);
+        const app = applications.find(a => (a.id === appId || a._id === appId));
+        if (!app) return;
+
+        const nextSaved = !app.isSaved;
+        const targetId = app._id || app.id;
+        try {
+            await placementService.updateApplication(targetId, {
+                isSaved: nextSaved,
+                status: app.status === 'Saved' && !nextSaved ? 'Applied' : app.status
+            });
+            loadApplications();
+        } catch (err) {
+            console.error('Failed to update bookmark:', err);
+        }
     };
 
     // Withdraw application
-    const handleWithdrawApplication = (appId) => {
+    const handleWithdrawApplication = async (appId) => {
         if (window.confirm('Are you sure you want to withdraw this application? This action cannot be undone.')) {
-            const updated = applications.filter(app => app.id !== appId);
-            updateAndPersistApplications(updated);
-            if (selectedApp?.id === appId) setSelectedApp(null);
+            const app = applications.find(a => (a.id === appId || a._id === appId));
+            const targetId = app?._id || app?.id || appId;
+            try {
+                await placementService.withdrawApplication(targetId);
+                if (selectedApp && (selectedApp.id === appId || selectedApp._id === appId)) {
+                    setSelectedApp(null);
+                }
+                loadApplications();
+            } catch (err) {
+                console.error('Failed to withdraw application:', err);
+            }
         }
     };
 
@@ -324,12 +316,12 @@ export default function Studentapplication() {
                                 <div className="app-attached-resume">
                                     <div className="app-resume-left">
                                         <FileText size={15} color="#ef4444" />
-                                        <span>{app.resumeName || 'Abhishek_K_Resume.pdf'}</span>
+                                        <span>{app.resumeName || 'Resume.pdf'}</span>
                                     </div>
                                     <button
                                         type="button"
                                         style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
-                                        onClick={() => alert(`Viewing attached resume: ${app.resumeName || 'Abhishek_K_Resume.pdf'}`)}
+                                        onClick={() => alert(`Viewing attached resume: ${app.resumeName || 'Resume.pdf'}`)}
                                     >
                                         <Eye size={12} /> View
                                     </button>
@@ -388,12 +380,15 @@ export default function Studentapplication() {
                                 <h4 className="modal-section-title">Hiring Stage Progress</h4>
                                 <div className="stepper-timeline">
                                     {['Applied', 'Screening', 'Assessment', 'Interview', 'Offer'].map((stepName, idx) => {
-                                        const currentStage = selectedApp.stage || (
-                                            selectedApp.status === 'Applied' ? 1 :
-                                            selectedApp.status === 'Shortlisted' ? 2 :
-                                            selectedApp.status === 'Interview' ? 4 :
-                                            selectedApp.status === 'Offered' ? 5 : 1
-                                        );
+                                        const statusToStage = (s) => {
+                                            const sl = (s || '').toLowerCase();
+                                            if (sl === 'shortlisted') return 2;
+                                            if (sl === 'assessment') return 3;
+                                            if (sl === 'interview') return 4;
+                                            if (sl === 'offered') return 5;
+                                            return 1;
+                                        };
+                                        const currentStage = selectedApp.stage || statusToStage(selectedApp.status);
                                         const isCompleted = idx + 1 < currentStage;
                                         const isActive = idx + 1 === currentStage;
 
@@ -472,7 +467,7 @@ export default function Studentapplication() {
                                             <FileText size={20} />
                                         </div>
                                         <div>
-                                            <h5>{selectedApp.resumeName || 'Abhishek_K_Resume.pdf'}</h5>
+                                            <h5>{selectedApp.resumeName || 'Resume.pdf'}</h5>
                                             <p>Submitted with this application</p>
                                         </div>
                                     </div>
@@ -480,7 +475,7 @@ export default function Studentapplication() {
                                         type="button"
                                         className="btn-secondary"
                                         style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                                        onClick={() => alert(`Opening resume: ${selectedApp.resumeName || 'Abhishek_K_Resume.pdf'}`)}
+                                        onClick={() => alert(`Opening resume: ${selectedApp.resumeName || 'Resume.pdf'}`)}
                                     >
                                         <Eye size={13} /> View Resume
                                     </button>

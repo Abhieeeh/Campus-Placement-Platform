@@ -13,7 +13,10 @@ const userSchema = new mongoose.Schema({
     role:{
         type: String,
         enum: ['student','recruiter','admin'],
-        default: 'student',
+        required: true,
     }
 
 });
+
+const user = mongoose.model('user', userSchema);
+export default user;

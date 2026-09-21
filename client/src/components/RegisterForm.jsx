@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, Building2 } from 'lucide-react';
 
-export default function RegisterForm({ role, onRegister }) {
+export default function RegisterForm({ role, onRegister, serverError }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,17 +27,17 @@ export default function RegisterForm({ role, onRegister }) {
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
-    onRegister({ email, role });
+    onRegister({ email, role, password });
   }
 
 
 
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>
-      {error && (
+      {(serverError || error) && (
         <div className="error-banner">
           <AlertCircle size={16} />
-          <span>{error}</span>
+          <span>{serverError || error}</span>
         </div>
       )}
 

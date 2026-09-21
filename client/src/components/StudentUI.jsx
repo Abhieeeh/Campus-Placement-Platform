@@ -188,12 +188,12 @@ export default function StudentUI({ user, onLogout }) {
 
                     </div>
                     <div className="sd-page-body">
-                        {currentpage === 'studentdashboard' && <Studentdashboard onNavigate={setActivePage} />}
-                        {currentpage === 'studentprofile' && <Studentprofile onNavigate={setActivePage} />}
+                        {currentpage === 'studentdashboard' && <Studentdashboard user={user} onNavigate={setActivePage} />}
+                        {currentpage === 'studentprofile' && <Studentprofile user={user} onNavigate={setActivePage} />}
                         {currentpage === 'studentjobs' && <Studentjobs user={user} />}
-                        {currentpage === 'studentapplications' && <Studentapplication />}
-                        {currentpage === 'studentinterviews' && <Studentinterviews />}
-                        {currentpage === 'studentnotifications' && <Studentnotifications onNavigate={setActivePage} />}
+                        {currentpage === 'studentapplications' && <Studentapplication user={user} />}
+                        {currentpage === 'studentinterviews' && <Studentinterviews user={user} />}
+                        {currentpage === 'studentnotifications' && <Studentnotifications user={user} onNavigate={setActivePage} />}
                     </div>
                 </main>
             </div>

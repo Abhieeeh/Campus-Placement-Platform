@@ -2,10 +2,10 @@
  * Recruiter Platform Unified API Service (Recruiter Facing)
  * 
  * Direct REST API client communicating with Express/MongoDB backend endpoints.
- * All dummy and mock data removed.
+ * Uses route parameters for clean, RESTful requests.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 /** Helper for JSON fetch requests */
 async function apiRequest(endpoint, options = {}) {
@@ -33,8 +33,8 @@ async function apiRequest(endpoint, options = {}) {
 export const recruiterService = {
     // ── Jobs ─────────────────────────────────────────────────────────────
     async getJobs(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const endpoint = `/jobs${query ? `?${query}` : ''}`;
+        const email = typeof params === 'string' ? params : params?.recruiterEmail;
+        const endpoint = email ? `/jobs/by-recruiter/${encodeURIComponent(email)}` : '/jobs';
         try {
             const data = await apiRequest(endpoint);
             return Array.isArray(data) ? data : [];
@@ -85,6 +85,59 @@ export const recruiterService = {
         }
     },
 
+    async getCandidateProfile(email, fallbackApp = {}) {
+        try {
+            if (email) {
+                const data = await apiRequest(`/auth/student-profile/${encodeURIComponent(email)}`);
+                if (data?.profile) {
+                    const prof = data.profile;
+                    const personal = prof.personalInfo || {};
+                    const academic = prof.academicInfo || {};
+                    const resume = prof.resume || {};
+
+                    return {
+                        id: prof._id || prof.id || fallbackApp.candidateId || fallbackApp.id || fallbackApp._id,
+                        name: personal.name || fallbackApp.candidateName || 'Student Candidate',
+                        email: personal.email || email || fallbackApp.studentEmail || fallbackApp.candidateEmail,
+                        phone: personal.phone || fallbackApp.candidatePhone || '',
+                        github: personal.github || '',
+                        linkedin: personal.linkedin || '',
+                        branch: academic.branch || personal.dept || fallbackApp.candidateBranch || 'CSE',
+                        cgpa: academic.cgpa !== undefined && academic.cgpa !== '' ? academic.cgpa : (fallbackApp.candidateCgpa || 0),
+                        backlogs: academic.backlogs !== undefined ? academic.backlogs : 0,
+                        graduationYear: academic.graduationYear || '2027',
+                        skills: Array.isArray(prof.skills) && prof.skills.length > 0 ? prof.skills : (fallbackApp.candidateSkills || ['General Aptitude', 'Communication']),
+                        resumeName: resume.name || fallbackApp.candidateResume || `${(personal.name || fallbackApp.candidateName || 'Student').replace(/\s+/g, '_')}_Resume.pdf`,
+                        projects: Array.isArray(prof.projects) ? prof.projects : [],
+                        experience: Array.isArray(prof.experience) ? prof.experience : []
+                    };
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to fetch detailed student profile, using application data:', err.message);
+        }
+
+        // Return unified structure from fallback application data
+        const candName = fallbackApp.candidateName || 'Student Candidate';
+        const candEmail = email || fallbackApp.studentEmail || fallbackApp.candidateEmail || `${candName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`;
+        return {
+            id: fallbackApp.candidateId || fallbackApp.id || fallbackApp._id,
+            name: candName,
+            email: candEmail,
+            phone: fallbackApp.candidatePhone || '+91 98765 43210',
+            github: '',
+            linkedin: '',
+            branch: fallbackApp.candidateBranch || 'CSE',
+            cgpa: fallbackApp.candidateCgpa || 8.0,
+            backlogs: 0,
+            graduationYear: '2027',
+            skills: fallbackApp.candidateSkills && fallbackApp.candidateSkills.length > 0 ? fallbackApp.candidateSkills : ['Problem Solving', 'Data Structures', 'Communication'],
+            resumeName: fallbackApp.candidateResume || `${candName.replace(/\s+/g, '_')}_Resume.pdf`,
+            projects: [],
+            experience: []
+        };
+    },
+
     async getAllCandidates(params = {}) {
         const query = new URLSearchParams(params).toString();
         try {
@@ -97,8 +150,8 @@ export const recruiterService = {
 
     // ── Applications ─────────────────────────────────────────────────────
     async getApplications(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const endpoint = `/applications${query ? `?${query}` : ''}`;
+        const email = typeof params === 'string' ? params : params?.recruiterEmail;
+        const endpoint = email ? `/applications/by-recruiter/${encodeURIComponent(email)}` : '/applications';
         try {
             const data = await apiRequest(endpoint);
             return Array.isArray(data) ? data : [];
@@ -108,7 +161,8 @@ export const recruiterService = {
     },
 
     async updateApplicationStatus(appId, newStatus) {
-        const res = await apiRequest(`/applications/${appId}`, {
+        const targetId = appId?._id || appId?.id || appId;
+        const res = await apiRequest(`/applications/${targetId}`, {
             method: 'PUT',
             body: JSON.stringify({ status: newStatus })
         });
@@ -119,10 +173,21 @@ export const recruiterService = {
     },
 
     // ── Shortlisted ──────────────────────────────────────────────────────
-    async getShortlisted() {
+    async getShortlisted(params = {}) {
         try {
-            const apps = await this.getApplications();
+            const apps = await this.getApplications(params);
             return apps.filter(a => ['Shortlisted', 'Interview', 'Offered'].includes(a.status));
+        } catch (e) {
+            return [];
+        }
+    },
+
+    async getShortlists(params = {}) {
+        const email = typeof params === 'string' ? params : params?.recruiterEmail;
+        const endpoint = email ? `/shortlists/by-recruiter/${encodeURIComponent(email)}` : '/shortlists';
+        try {
+            const data = await apiRequest(endpoint);
+            return Array.isArray(data) ? data : [];
         } catch (e) {
             return [];
         }
@@ -130,8 +195,8 @@ export const recruiterService = {
 
     // ── Interviews ───────────────────────────────────────────────────────
     async getInterviews(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const endpoint = `/interviews${query ? `?${query}` : ''}`;
+        const email = typeof params === 'string' ? params : params?.recruiterEmail;
+        const endpoint = email ? `/interviews/by-recruiter/${encodeURIComponent(email)}` : '/interviews';
         try {
             const data = await apiRequest(endpoint);
             return Array.isArray(data) ? data : [];
@@ -209,16 +274,20 @@ export const recruiterService = {
     },
 
     // ── Company Profile ──────────────────────────────────────────────────
-    async getCompanyProfile() {
+    async getCompanyProfile(email = '') {
         try {
+            if (email) {
+                const data = await apiRequest(`/auth/recruiter-profile/${encodeURIComponent(email)}`);
+                if (data?.profile) return data.profile;
+            }
             return await apiRequest('/recruiter/profile');
         } catch (e) {
             return {
                 companyName: 'Company Profile',
                 recruiterName: 'Recruiter',
-                email: 'recruiter@company.com',
+                email: email || 'recruiter@company.com',
                 phone: '+91 98765 43210',
-                website: 'https://company.com',
+                website: '',
                 description: '',
                 hiringBranches: ['CSE', 'IT', 'AI/DS', 'ECE'],
                 minCgpa: 7.0
@@ -226,13 +295,23 @@ export const recruiterService = {
         }
     },
 
-    async updateCompanyProfile(updates) {
-        const res = await apiRequest('/recruiter/profile', {
-            method: 'PUT',
-            body: JSON.stringify(updates)
-        }).catch(() => updates);
+    async updateCompanyProfile(updates, email = '') {
+        try {
+            const payload = {
+                email: email || updates.email,
+                companyProfile: updates
+            };
+            const data = await apiRequest('/auth/recruiter-profile', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            window.dispatchEvent(new Event('recruiter_profile_updated'));
+            return data?.data?.companyProfile || updates;
+        } catch (e) {
+            // fallback
+        }
         window.dispatchEvent(new Event('recruiter_profile_updated'));
-        return res;
+        return updates;
     },
 
     // ── Settings ─────────────────────────────────────────────────────────
@@ -263,22 +342,24 @@ export const recruiterService = {
     },
 
     // ── Dashboard Aggregated Stats ───────────────────────────────────────
-    async getDashboardStats() {
+    async getDashboardStats(params = {}) {
+        const email = typeof params === 'string' ? params : params?.recruiterEmail;
+        const endpoint = email ? `/dashboard/stats/recruiter/${encodeURIComponent(email)}` : '/dashboard/stats';
         try {
-            const data = await apiRequest('/recruiter/dashboard');
+            const data = await apiRequest(endpoint);
             return data;
         } catch (e) {
             try {
                 const [jobs, apps, interviews] = await Promise.all([
-                    this.getJobs(),
-                    this.getApplications(),
-                    this.getInterviews()
+                    this.getJobs(params),
+                    this.getApplications(params),
+                    this.getInterviews(params)
                 ]);
 
                 return {
-                    activeJobs: jobs.length,
+                    activeJobs: jobs.filter(j => j.status !== 'Inactive' && j.status !== 'Closed').length,
                     totalApplicants: apps.length,
-                    shortlisted: apps.filter(a => (a.status || '').toLowerCase() === 'shortlisted').length,
+                    shortlisted: apps.filter(a => ['shortlisted', 'interview', 'offered'].includes((a.status || '').toLowerCase())).length,
                     upcomingInterviews: interviews.filter(i => (i.status || '').toLowerCase() === 'scheduled' || (i.status || '').toLowerCase() === 'upcoming').length,
                     newApplications: apps.filter(a => (a.status || '').toLowerCase() === 'new' || (a.status || '').toLowerCase() === 'applied').length,
                     offered: apps.filter(a => (a.status || '').toLowerCase() === 'offered').length,

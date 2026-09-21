@@ -1,93 +1,130 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Edit2, Mail, Phone, BookOpen, Award, Calendar, AlertTriangle,
     CheckCircle, FileText, Upload, Eye, X, Plus, Briefcase, GitBranch, Trash2,
-    ExternalLink, Globe, Link2
+    ExternalLink, Globe
 } from 'lucide-react';
 import './Studentprofile.css';
 
-export default function Studentprofile() {
+function nameFromEmail(email = '') {
+    return email
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+export default function Studentprofile({ user }) {
     const [isEditing, setIsEditing] = useState(false);
 
-    // Load Initial Data from localStorage or defaults
-    const [personalInfo, setPersonalInfo] = useState(() => {
-        const saved = localStorage.getItem('student_personal_info');
-        if (saved) {
-            try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-        }
-        return {
-            name: 'Abhishek Kumar',
-            dept: 'Computer Science & Engineering',
-            email: 'abhishek.student@campus.edu',
-            phone: '+91 98765 43210',
-            github: 'https://github.com/abhieeeh',
-            linkedin: 'https://linkedin.com/in/abhishekk'
-        };
+    const getInitialPersonal = () => ({
+        name: user?.name || nameFromEmail(user?.email) || 'Student',
+        dept: 'Computer Science & Engineering',
+        email: user?.email || '',
+        phone: '',
+        github: '',
+        linkedin: ''
     });
 
-    const [academicInfo, setAcademicInfo] = useState(() => {
-        const saved = localStorage.getItem('student_academic_info');
-        if (saved) {
-            try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-        }
-        return {
-            branch: 'CSE',
-            cgpa: '8.4',
-            graduationYear: '2027',
-            backlogs: '0'
-        };
+    const getInitialAcademic = () => ({
+        branch: 'CSE',
+        cgpa: '',
+        graduationYear: String(new Date().getFullYear() + 1),
+        backlogs: '0'
     });
 
-    // Auto-save academic & personal info to localStorage
-    const handleToggleEdit = () => {
-        if (isEditing) {
-            // Saving
-            localStorage.setItem('student_personal_info', JSON.stringify(personalInfo));
-            localStorage.setItem('student_academic_info', JSON.stringify(academicInfo));
+    const [personalInfo, setPersonalInfo] = useState(getInitialPersonal);
+    const [academicInfo, setAcademicInfo] = useState(getInitialAcademic);
+    const [skills, setSkills] = useState(['React', 'JavaScript', 'Python', 'Node.js', 'SQL']);
+    const [projects, setProjects] = useState([]);
+    const [resumeData, setResumeData] = useState({
+        name: 'No resume uploaded',
+        size: '0 KB',
+        lastUpdated: 'Not uploaded yet'
+    });
+    const [newSkill, setNewSkill] = useState('');
+    const [showAddProject, setShowAddProject] = useState(false);
+    const [newProject, setNewProject] = useState({ title: '', github: '', description: '' });
+    const [projectError, setProjectError] = useState('');
+    const resumeInputRef = useRef(null);
+
+    // Fetch from MongoDB studentprofile collection
+    const fetchStudentProfile = async () => {
+        if (!user?.email) return;
+        try {
+            const res = await fetch(`http://localhost:5000/api/auth/student-profile/${encodeURIComponent(user.email)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.profile) {
+                    const prof = data.profile;
+                    if (prof.personalInfo) {
+                        setPersonalInfo({
+                            ...getInitialPersonal(),
+                            ...prof.personalInfo,
+                            email: user.email
+                        });
+                    }
+                    if (prof.academicInfo) {
+                        setAcademicInfo(prof.academicInfo);
+                    }
+                    if (Array.isArray(prof.skills) && prof.skills.length > 0) {
+                        setSkills(prof.skills);
+                    }
+                    if (Array.isArray(prof.projects)) {
+                        setProjects(prof.projects);
+                    }
+                    if (prof.resume && prof.resume.name) {
+                        setResumeData(prof.resume);
+                    }
+                }
+            } else {
+                setPersonalInfo(getInitialPersonal());
+                setAcademicInfo(getInitialAcademic());
+            }
+        } catch (e) {
+            // offline fallback
+        }
+    };
+
+    useEffect(() => {
+        fetchStudentProfile();
+        window.addEventListener('student_profile_updated', fetchStudentProfile);
+        return () => {
+            window.removeEventListener('student_profile_updated', fetchStudentProfile);
+        };
+    }, [user?.email]);
+
+    const saveProfileToBackend = async (personal, academic, updatedSkills, updatedProjects, updatedResume) => {
+        try {
+            await fetch('http://localhost:5000/api/auth/student-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: user?.email || personal.email,
+                    personalInfo: personal,
+                    academicInfo: academic,
+                    skills: updatedSkills,
+                    projects: updatedProjects,
+                    resume: updatedResume
+                })
+            });
             window.dispatchEvent(new Event('student_profile_updated'));
+        } catch (err) {
+            // Ignore offline/server errors
+        }
+    };
+
+    const handleToggleEdit = async () => {
+        if (isEditing) {
+            await saveProfileToBackend(personalInfo, academicInfo, skills, projects, resumeData);
         }
         setIsEditing(!isEditing);
     };
 
-    // Eligibility logic
     const isEligible = Number(academicInfo.cgpa) >= 6.0 && Number(academicInfo.backlogs) === 0;
-
-    const [skills, setSkills] = useState(() => {
-        const saved = localStorage.getItem('student_skills');
-        if (saved) {
-            try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-        }
-        return ['React', 'JavaScript', 'Python', 'Node.js', 'SQL'];
-    });
     const skilllen = skills.length;
-    const [newSkill, setNewSkill] = useState('');
-
-    const [projects, setProjects] = useState(() => {
-        const saved = localStorage.getItem('student_projects');
-        if (saved) {
-            try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-        }
-        return [
-            { id: 1, title: 'Campus Placement Portal', github: 'https://github.com/abhieeeh/campus-portal', description: 'A comprehensive campus placement management system built with React and Vite.' }
-        ];
-    });
     const projectlen = projects.length;
 
-    // Resume State
-    const resumeInputRef = React.useRef(null);
-    const [resumeData, setResumeData] = useState(() => {
-        const saved = localStorage.getItem('student_resume');
-        if (saved) {
-            try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-        }
-        return {
-            name: 'Abhishek_K_Resume.pdf',
-            size: '1.4 MB',
-            lastUpdated: 'Uploaded on Sep 12, 2026'
-        };
-    });
-
-    const handleResumeUpload = (e) => {
+    const handleResumeUpload = async (e) => {
         const file = e.target.files?.[0];
         if (file) {
             const updated = {
@@ -96,48 +133,42 @@ export default function Studentprofile() {
                 lastUpdated: 'Just now'
             };
             setResumeData(updated);
-            localStorage.setItem('student_resume', JSON.stringify(updated));
-            window.dispatchEvent(new Event('student_profile_updated'));
+            await saveProfileToBackend(personalInfo, academicInfo, skills, projects, updated);
         }
     };
 
-    const [showAddProject, setShowAddProject] = useState(false);
-    const [newProject, setNewProject] = useState({ title: '', github: '', description: '' });
-    const [projectError, setProjectError] = useState('');
-
-    // Handlers
-    const handleAddSkill = (e) => {
+    const handleAddSkill = async (e) => {
         if (e.key === 'Enter' && newSkill.trim() !== '') {
             if (!skills.includes(newSkill.trim())) {
                 const updated = [...skills, newSkill.trim()];
                 setSkills(updated);
-                localStorage.setItem('student_skills', JSON.stringify(updated));
+                await saveProfileToBackend(personalInfo, academicInfo, updated, projects, resumeData);
             }
             setNewSkill('');
         }
     };
 
-    const removeSkill = (skillToRemove) => {
+    const removeSkill = async (skillToRemove) => {
         const updated = skills.filter(s => s !== skillToRemove);
         setSkills(updated);
-        localStorage.setItem('student_skills', JSON.stringify(updated));
+        await saveProfileToBackend(personalInfo, academicInfo, updated, projects, resumeData);
     };
 
-    const removeProject = (id) => {
+    const removeProject = async (id) => {
         const updated = projects.filter(p => p.id !== id);
         setProjects(updated);
-        localStorage.setItem('student_projects', JSON.stringify(updated));
+        await saveProfileToBackend(personalInfo, academicInfo, skills, updated, resumeData);
     };
 
-    const handleAddProject = () => {
+    const handleAddProject = async () => {
         if (!newProject.title.trim()) { setProjectError('Project name is required.'); return; }
         if (!newProject.github.trim()) { setProjectError('GitHub URL is required.'); return; }
         const updated = [...projects, { id: Date.now(), ...newProject }];
         setProjects(updated);
-        localStorage.setItem('student_projects', JSON.stringify(updated));
         setNewProject({ title: '', github: '', description: '' });
         setProjectError('');
         setShowAddProject(false);
+        await saveProfileToBackend(personalInfo, academicInfo, skills, updated, resumeData);
     };
 
     const closeModal = () => {
@@ -146,26 +177,35 @@ export default function Studentprofile() {
         setProjectError('');
     };
 
+    const displayName = personalInfo.name || nameFromEmail(user?.email) || 'Student';
+
     return (
         <div className="profile-container">
             {/* Header */}
             <div className="profile-header">
                 <div className="profile-title">
-                    <div className="avatar-large">{personalInfo.name.charAt(0)}</div>
+                    <div className="avatar-large">{displayName.charAt(0).toUpperCase()}</div>
                     <div>
                         {isEditing ? (
                             <>
-                                <input type="text" value={personalInfo.name} onChange={(e) => setPersonalInfo({ ...personalInfo, name: e.target.value })} /><br />
+                                <input
+                                    type="text"
+                                    value={personalInfo.name}
+                                    onChange={(e) => setPersonalInfo({ ...personalInfo, name: e.target.value })}
+                                /><br />
                             </>
                         ) :
-                            <h2>{personalInfo.name}</h2>
+                            <h2>{displayName}</h2>
                         }
                         {isEditing ? (
-                            <input type="text" value={personalInfo.dept} onChange={(e) => setPersonalInfo({ ...personalInfo, dept: e.target.value })} />
+                            <input
+                                type="text"
+                                value={personalInfo.dept}
+                                onChange={(e) => setPersonalInfo({ ...personalInfo, dept: e.target.value })}
+                            />
                         ) : (
                             <p>{personalInfo.dept}</p>
                         )}
-
                     </div>
                 </div>
                 <button
@@ -194,7 +234,7 @@ export default function Studentprofile() {
                                             onChange={(e) => setPersonalInfo({ ...personalInfo, email: e.target.value })}
                                         />
                                     ) : (
-                                        <p>{personalInfo.email}</p>
+                                        <p>{personalInfo.email || user?.email}</p>
                                     )}
                                 </div>
                             </div>
@@ -205,11 +245,12 @@ export default function Studentprofile() {
                                     {isEditing ? (
                                         <input
                                             type="text"
+                                            placeholder="+91 98765 43210"
                                             value={personalInfo.phone}
                                             onChange={(e) => setPersonalInfo({ ...personalInfo, phone: e.target.value })}
                                         />
                                     ) : (
-                                        <p>{personalInfo.phone}</p>
+                                        <p>{personalInfo.phone || 'Not provided'}</p>
                                     )}
                                 </div>
                             </div>
@@ -280,7 +321,7 @@ export default function Studentprofile() {
                                             onChange={(e) => setAcademicInfo({ ...academicInfo, branch: e.target.value })}
                                         />
                                     ) : (
-                                        <p>{academicInfo.branch}</p>
+                                        <p>{academicInfo.branch || 'Not set'}</p>
                                     )}
                                 </div>
                             </div>
@@ -299,7 +340,7 @@ export default function Studentprofile() {
                                             onChange={(e) => setAcademicInfo({ ...academicInfo, cgpa: e.target.value })}
                                         />
                                     ) : (
-                                        <p>{academicInfo.cgpa}</p>
+                                        <p>{academicInfo.cgpa || 'Not set'}</p>
                                     )}
                                 </div>
                             </div>
@@ -315,7 +356,7 @@ export default function Studentprofile() {
                                             onChange={(e) => setAcademicInfo({ ...academicInfo, graduationYear: e.target.value })}
                                         />
                                     ) : (
-                                        <p>{academicInfo.graduationYear}</p>
+                                        <p>{academicInfo.graduationYear || 'Not set'}</p>
                                     )}
                                 </div>
                             </div>
@@ -332,19 +373,19 @@ export default function Studentprofile() {
                                             onChange={(e) => setAcademicInfo({ ...academicInfo, backlogs: e.target.value })}
                                         />
                                     ) : (
-                                        <p>{academicInfo.backlogs}</p>
+                                        <p>{academicInfo.backlogs ?? '0'}</p>
                                     )}
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Eligibility Status (Non-editable) */}
+                    {/* Eligibility Status */}
                     <div className={`eligibility-banner ${isEligible ? 'eligible' : 'not-eligible'}`}>
                         {isEligible ? <CheckCircle size={24} /> : <AlertTriangle size={24} />}
                         <div className="eligibility-text">
                             <h4>Placement Eligibility</h4>
-                            <p>{academicInfo.cgpa !== "" ? isEligible ? 'You are eligible for campus placements.' : 'You do not meet the minimum criteria for placements.' : 'Please Fill the academic information to check eligibility'}</p>
+                            <p>{academicInfo.cgpa !== "" ? isEligible ? 'You are eligible for campus placements.' : 'You do not meet the minimum criteria for placements.' : 'Please fill the academic information to check eligibility'}</p>
                         </div>
                     </div>
                 </div>
@@ -389,7 +430,9 @@ export default function Studentprofile() {
                             {isEditing && <span className="edit-hint">Press Enter to add</span>}
                         </div>
                         <div className="skills-container">
-                            {skilllen == 0 && isEditing == false ? (<p> Add your skills by clicking on edit profile button </p>) :
+                            {skilllen === 0 && !isEditing ? (
+                                <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Add your skills by clicking on Edit Profile</p>
+                            ) : (
                                 skills.map((skill, idx) => (
                                     <div key={idx} className="skill-tag">
                                         {skill}
@@ -399,7 +442,8 @@ export default function Studentprofile() {
                                             </button>
                                         )}
                                     </div>
-                                ))}
+                                ))
+                            )}
                             {isEditing && (
                                 <input
                                     type="text"
@@ -424,10 +468,10 @@ export default function Studentprofile() {
                             )}
                         </div>
                         <div className="projects-list">
-                            {
-                                projectlen == 0 && isEditing == false ? (
-                                    <p> Add you project by clicking edit profile button</p>
-                                ) : (projects.map(project => (
+                            {projectlen === 0 && !isEditing ? (
+                                <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Add your projects by clicking on Edit Profile</p>
+                            ) : (
+                                projects.map(project => (
                                     <div key={project.id} className="project-card">
                                         <div className="project-header">
                                             <div className="project-title-wrapper">
@@ -435,9 +479,11 @@ export default function Studentprofile() {
                                                 <h4>{project.title}</h4>
                                             </div>
                                             <div className="project-actions">
-                                                <a href={project.github} target="_blank" rel="noopener noreferrer" className="github-link">
-                                                    <GitBranch size={18} /> Repo
-                                                </a>
+                                                {project.github && (
+                                                    <a href={project.github} target="_blank" rel="noopener noreferrer" className="github-link">
+                                                        <GitBranch size={18} /> Repo
+                                                    </a>
+                                                )}
                                                 {isEditing && (
                                                     <button className="delete-project-btn" onClick={() => removeProject(project.id)}>
                                                         <Trash2 size={16} />
@@ -445,9 +491,10 @@ export default function Studentprofile() {
                                                 )}
                                             </div>
                                         </div>
-                                        <p className="project-desc">{project.description}</p>
-                                    </div>)
-                                ))}
+                                        {project.description && <p className="project-desc">{project.description}</p>}
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>

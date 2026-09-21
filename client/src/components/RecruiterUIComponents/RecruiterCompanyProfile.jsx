@@ -7,33 +7,43 @@ import {
 import { recruiterService } from '../../services/recruiterService';
 import './RecruiterCompanyProfile.css';
 
-const DEFAULT_PROFILE = {
-    companyName: 'TechCorp Solutions',
-    recruiterName: 'Recruiter Admin',
-    email: 'recruiter@techcorp.com',
-    phone: '+91 99887 76655',
-    website: 'https://techcorp.com',
-    description: 'TechCorp Solutions is an enterprise technology provider partnering with top universities for graduate recruitment drives.',
-    hiringBranches: ['CSE', 'IT', 'AI/DS', 'ECE'],
-    minCgpa: 7.0
-};
+function nameFromEmail(email = '') {
+    if (!email) return 'Recruiter';
+    return email
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+}
 
 export default function RecruiterCompanyProfile({ user }) {
-    const [profile, setProfile] = useState(DEFAULT_PROFILE);
+    const userEmail = user?.email || '';
+    const initialProfile = {
+        companyName: '',
+        recruiterName: user?.name || nameFromEmail(userEmail),
+        email: userEmail,
+        phone: '',
+        website: '',
+        description: '',
+        hiringBranches: ['CSE', 'IT', 'AI/DS', 'ECE'],
+        minCgpa: 7.0
+    };
+
+    const [profile, setProfile] = useState(initialProfile);
     const [isEditing, setIsEditing] = useState(false);
-    const [formData, setFormData] = useState(DEFAULT_PROFILE);
+    const [formData, setFormData] = useState(initialProfile);
     const [newBranchInput, setNewBranchInput] = useState('');
     const [saveFeedback, setSaveFeedback] = useState(false);
 
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const loaded = await recruiterService.getCompanyProfile();
+                const loaded = await recruiterService.getCompanyProfile(userEmail);
                 if (loaded && typeof loaded === 'object') {
                     const normalized = {
-                        ...DEFAULT_PROFILE,
+                        ...initialProfile,
                         ...loaded,
-                        hiringBranches: Array.isArray(loaded.hiringBranches) ? loaded.hiringBranches : DEFAULT_PROFILE.hiringBranches
+                        email: userEmail || loaded.email || initialProfile.email,
+                        hiringBranches: Array.isArray(loaded.hiringBranches) ? loaded.hiringBranches : initialProfile.hiringBranches
                     };
                     setProfile(normalized);
                     setFormData(normalized);
@@ -43,7 +53,7 @@ export default function RecruiterCompanyProfile({ user }) {
             }
         };
         fetchProfile();
-    }, []);
+    }, [userEmail]);
 
     const handleAddBranch = () => {
         const branches = Array.isArray(formData.hiringBranches) ? formData.hiringBranches : [];
@@ -67,10 +77,11 @@ export default function RecruiterCompanyProfile({ user }) {
     const handleSave = async (e) => {
         e.preventDefault();
         try {
-            const updated = await recruiterService.updateCompanyProfile(formData);
+            const updated = await recruiterService.updateCompanyProfile(formData, userEmail);
             const normalized = {
-                ...DEFAULT_PROFILE,
-                ...(updated || formData)
+                ...initialProfile,
+                ...(updated || formData),
+                email: userEmail
             };
             setProfile(normalized);
             setIsEditing(false);
@@ -86,8 +97,8 @@ export default function RecruiterCompanyProfile({ user }) {
         setIsEditing(false);
     };
 
-    const displayBranches = Array.isArray(profile?.hiringBranches) ? profile.hiringBranches : DEFAULT_PROFILE.hiringBranches;
-    const formBranches = Array.isArray(formData?.hiringBranches) ? formData.hiringBranches : DEFAULT_PROFILE.hiringBranches;
+    const displayBranches = Array.isArray(profile?.hiringBranches) ? profile.hiringBranches : ['CSE', 'IT', 'AI/DS', 'ECE'];
+    const formBranches = Array.isArray(formData?.hiringBranches) ? formData.hiringBranches : ['CSE', 'IT', 'AI/DS', 'ECE'];
 
     return (
         <div className="rcmp-container">
