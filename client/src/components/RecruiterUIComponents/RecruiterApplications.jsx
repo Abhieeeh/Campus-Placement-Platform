@@ -9,7 +9,7 @@ import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterApplications.css';
 
-export default function RecruiterApplications({ onScheduleInterview }) {
+export default function RecruiterApplications({ user, onScheduleInterview }) {
     const [applications, setApplications] = useState([]);
     const [jobs, setJobs] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -25,8 +25,8 @@ export default function RecruiterApplications({ onScheduleInterview }) {
     const loadData = async () => {
         try {
             const [appList, jList] = await Promise.all([
-                recruiterService.getApplications(),
-                recruiterService.getJobs()
+                recruiterService.getApplications({ recruiterEmail: user?.email }),
+                recruiterService.getJobs({ recruiterEmail: user?.email })
             ]);
             setApplications(appList);
             setJobs(jList);
@@ -46,24 +46,16 @@ export default function RecruiterApplications({ onScheduleInterview }) {
         };
     }, []);
 
-    const handleViewCandidate = (app) => {
-        const cand = recruiterService.getCandidateById(app.candidateId) || {
-            id: app.candidateId,
-            name: app.candidateName,
-            email: `${app.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-            branch: app.candidateBranch,
-            cgpa: app.candidateCgpa,
-            skills: app.candidateSkills || ['General Aptitude', 'Communication'],
-            resumeName: app.candidateResume || `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`,
-            projects: [],
-            experience: []
-        };
+    const handleViewCandidate = async (app) => {
+        const email = app.studentEmail || app.candidateEmail;
+        const cand = await recruiterService.getCandidateProfile(email, app);
         setSelectedCandidate(cand);
         setSelectedApplication(app);
     };
 
     const handleStatusChange = async (appId, newStatus) => {
-        await recruiterService.updateApplicationStatus(appId, newStatus);
+        const targetId = appId?._id || appId?.id || appId;
+        await recruiterService.updateApplicationStatus(targetId, newStatus);
         setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
         loadData();
     };
@@ -228,7 +220,7 @@ export default function RecruiterApplications({ onScheduleInterview }) {
                                     {app.status !== 'Shortlisted' && app.status !== 'Offered' && (
                                         <button
                                             className="ra-btn-shortlist"
-                                            onClick={() => handleStatusChange(app.id, 'Shortlisted')}
+                                            onClick={() => handleStatusChange(app._id || app.id, 'Shortlisted')}
                                             title="Shortlist candidate"
                                         >
                                             <UserCheck size={13} /> Shortlist
@@ -238,14 +230,9 @@ export default function RecruiterApplications({ onScheduleInterview }) {
                                     {app.status !== 'Interview' && (
                                         <button
                                             className="ra-btn-primary"
-                                            onClick={() => {
-                                                const cand = recruiterService.getCandidateById(app.candidateId) || {
-                                                    id: app.candidateId,
-                                                    name: app.candidateName,
-                                                    email: `${app.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-                                                    branch: app.candidateBranch,
-                                                    cgpa: app.candidateCgpa
-                                                };
+                                            onClick={async () => {
+                                                const email = app.studentEmail || app.candidateEmail;
+                                                const cand = await recruiterService.getCandidateProfile(email, app);
                                                 if (onScheduleInterview) onScheduleInterview(cand, app);
                                             }}
                                             title="Schedule interview"
@@ -257,7 +244,7 @@ export default function RecruiterApplications({ onScheduleInterview }) {
                                     {app.status !== 'Rejected' && (
                                         <button
                                             className="ra-btn-reject"
-                                            onClick={() => handleStatusChange(app.id, 'Rejected')}
+                                            onClick={() => handleStatusChange(app._id || app.id, 'Rejected')}
                                             title="Reject"
                                         >
                                             <XCircle size={14} />
@@ -337,7 +324,7 @@ export default function RecruiterApplications({ onScheduleInterview }) {
                                                     <button
                                                         className="ra-btn-shortlist"
                                                         style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem' }}
-                                                        onClick={() => handleStatusChange(app.id, 'Shortlisted')}
+                                                        onClick={() => handleStatusChange(app._id || app.id, 'Shortlisted')}
                                                     >
                                                         <UserCheck size={12} />
                                                     </button>
@@ -346,7 +333,7 @@ export default function RecruiterApplications({ onScheduleInterview }) {
                                                     <button
                                                         className="ra-btn-reject"
                                                         style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem' }}
-                                                        onClick={() => handleStatusChange(app.id, 'Rejected')}
+                                                        onClick={() => handleStatusChange(app._id || app.id, 'Rejected')}
                                                     >
                                                         <XCircle size={13} />
                                                     </button>

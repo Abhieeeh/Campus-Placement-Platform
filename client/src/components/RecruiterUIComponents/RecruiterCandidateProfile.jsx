@@ -19,7 +19,8 @@ export default function RecruiterCandidateProfile({
 
     const handleStatusUpdate = (newStatus) => {
         if (application && onStatusChange) {
-            onStatusChange(application.id, newStatus);
+            // Prefer _id (MongoDB ObjectId) over virtual id field
+            onStatusChange(application._id || application.id, newStatus);
         }
     };
 

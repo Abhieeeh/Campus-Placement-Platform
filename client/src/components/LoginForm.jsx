@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, Building2, CheckCircle } from 'lucide-react';
 
-export default function LoginForm({ role, onLogin, initialEmail = '', successMessage = '' }) {
+export default function LoginForm({ role, onLogin, initialEmail = '', successMessage = '', serverError = '' }) {
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -58,10 +58,10 @@ export default function LoginForm({ role, onLogin, initialEmail = '', successMes
         </div>
       )}
 
-      {error && (
+      {(serverError || error) && (
         <div className="error-banner">
           <AlertCircle size={16} />
-          <span>{error}</span>
+          <span>{serverError || error}</span>
         </div>
       )}
 

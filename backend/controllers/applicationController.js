@@ -1,94 +1,267 @@
-// In-memory data store (ready to be replaced with MongoDB Mongoose model)
-let applications = [];
+import Application from "../models/application.js";
+import Job from "../models/job.js";
+import Shortlist from "../models/shortlist.js";
 
-export const getApplications = (req, res) => {
+// Get applications by query parameters (fallback)
+export const getApplications = async (req, res) => {
     try {
-        const { status, search, jobId } = req.query;
-        let filtered = [...applications];
+        const { status, search, jobId, recruiterEmail, studentEmail } = req.query;
+        let query = {};
 
-        if (jobId) {
-            filtered = filtered.filter(a => a.jobId === jobId);
-        }
+        if (recruiterEmail) query.recruiterEmail = recruiterEmail;
+        if (studentEmail) query.studentEmail = studentEmail;
+        if (jobId) query.jobId = jobId;
 
-        if (status && status !== 'all') {
-            filtered = filtered.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
+        if (status && status !== 'all' && status !== 'All') {
+            query.status = { $regex: new RegExp(`^${status}$`, 'i') };
         }
 
         if (search) {
-            const q = search.toLowerCase().trim();
-            filtered = filtered.filter(a =>
-                (a.role || a.jobTitle || '').toLowerCase().includes(q) ||
-                (a.company || '').toLowerCase().includes(q) ||
-                (a.candidateName || '').toLowerCase().includes(q) ||
-                (a.candidateBranch || '').toLowerCase().includes(q) ||
-                (a.status || '').toLowerCase().includes(q)
-            );
+            const regex = new RegExp(search.trim(), 'i');
+            query.$or = [
+                { role: regex },
+                { jobTitle: regex },
+                { company: regex },
+                { candidateName: regex },
+                { candidateBranch: regex },
+                { status: regex }
+            ];
         }
 
-        res.status(200).json(filtered);
+        const apps = await Application.find(query).sort({ createdAt: -1 });
+        res.status(200).json(apps);
     } catch (error) {
+        console.error('Error getting applications:', error);
         res.status(500).json({ message: 'Failed to fetch applications', error: error.message });
     }
 };
 
-export const applyToJob = (req, res) => {
+// Get applications for a specific recruiter by route parameter
+export const getApplicationsByRecruiter = async (req, res) => {
     try {
-        const { jobId, job, studentProfile, newResume } = req.body;
-        
-        const newApp = {
-            id: `APP-${Date.now().toString().slice(-4)}`,
-            jobId: jobId || job?.id || job?._id,
-            role: job?.role || job?.title || 'Software Engineer',
-            jobTitle: job?.role || job?.title || 'Software Engineer',
-            company: job?.company || 'Company',
-            color: job?.color || 'linear-gradient(135deg, #0d9488, #059669)',
-            location: job?.location || 'India',
-            type: job?.type || 'Full-time',
-            salary: job?.salary || 'Best in Industry',
+        const { email } = req.params;
+        const apps = await Application.find({ recruiterEmail: email }).sort({ createdAt: -1 });
+        res.status(200).json(apps);
+    } catch (error) {
+        console.error('Error fetching recruiter applications:', error);
+        res.status(500).json({ message: 'Failed to fetch recruiter applications', error: error.message });
+    }
+};
+
+// Get applications for a specific student by route parameter
+export const getApplicationsByStudent = async (req, res) => {
+    try {
+        const { email } = req.params;
+        const apps = await Application.find({ studentEmail: email }).sort({ createdAt: -1 });
+        res.status(200).json(apps);
+    } catch (error) {
+        console.error('Error fetching student applications:', error);
+        res.status(500).json({ message: 'Failed to fetch student applications', error: error.message });
+    }
+};
+
+// Get applications for a specific job by route parameter
+export const getApplicationsByJob = async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const apps = await Application.find({ jobId }).sort({ createdAt: -1 });
+        res.status(200).json(apps);
+    } catch (error) {
+        console.error('Error fetching job applications:', error);
+        res.status(500).json({ message: 'Failed to fetch applications for job', error: error.message });
+    }
+};
+
+// Get single application by ID
+export const getApplicationById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const app = await Application.findById(id);
+        if (!app) {
+            return res.status(404).json({ message: 'Application not found' });
+        }
+        res.status(200).json(app);
+    } catch (error) {
+        console.error('Error fetching application by id:', error);
+        res.status(500).json({ message: 'Failed to fetch application', error: error.message });
+    }
+};
+
+// Apply to a job (Blocks closed jobs, uses DB job data, simplifies logic)
+export const applyToJob = async (req, res) => {
+    try {
+        const { jobId, studentProfile, newResume } = req.body;
+        const actualJobId = jobId || req.body.job?.id || req.body.job?._id;
+
+        if (!actualJobId) {
+            return res.status(400).json({ message: 'Job ID is required' });
+        }
+
+        const studentEmail = studentProfile?.email || studentProfile?.personalInfo?.email;
+        if (!studentEmail) {
+            return res.status(400).json({ message: 'Student email is required' });
+        }
+
+        // 1. Fetch and validate job from DB
+        const jobDoc = await Job.findById(actualJobId);
+        if (!jobDoc) {
+            return res.status(404).json({ message: 'Job posting not found' });
+        }
+
+        const jobStatus = (jobDoc.status || '').toLowerCase();
+        if (jobStatus === 'closed') {
+            return res.status(400).json({ message: 'This job posting is closed and is no longer accepting applications.' });
+        }
+        if (jobStatus === 'inactive' || jobStatus === 'draft') {
+            return res.status(400).json({ message: 'This job posting is currently not active.' });
+        }
+
+        // 2. Extract candidate information
+        const candidateName = studentProfile?.name || 
+            studentProfile?.personalInfo?.name || 
+            studentEmail.split('@')[0];
+
+        const candidateBranch = studentProfile?.branch || 
+            studentProfile?.dept || 
+            studentProfile?.academicInfo?.branch || 
+            studentProfile?.personalInfo?.dept || 
+            'CSE';
+
+        const candidateCgpa = parseFloat(studentProfile?.cgpa || studentProfile?.academicInfo?.cgpa) || 0;
+        const candidateSkills = Array.isArray(studentProfile?.skills) ? studentProfile.skills : [];
+        const candidateResume = newResume?.name || studentProfile?.resume?.name || 'Resume.pdf';
+        const candidatePhone = studentProfile?.phone || studentProfile?.personalInfo?.phone || '';
+
+        // 3. Construct application document
+        const appData = {
+            jobId: actualJobId,
+            recruiterEmail: jobDoc.recruiterEmail || 'recruiter@company.com',
+            studentEmail,
+            role: jobDoc.role || jobDoc.title || 'Software Engineer',
+            jobTitle: jobDoc.role || jobDoc.title || 'Software Engineer',
+            company: jobDoc.company || 'Company',
+            color: jobDoc.color || 'linear-gradient(135deg, #0d9488, #059669)',
+            location: jobDoc.location || 'India',
+            type: jobDoc.type || 'Full-time',
+            salary: jobDoc.salary || 'Competitive',
             appliedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
             appliedTimestamp: Date.now(),
             status: 'New',
-            candidateId: studentProfile?.id || 'STU-001',
-            candidateName: studentProfile?.name || 'Student Candidate',
-            candidateBranch: studentProfile?.branch || studentProfile?.dept || 'CSE',
-            candidateCgpa: parseFloat(studentProfile?.cgpa) || 8.0,
-            candidateSkills: studentProfile?.skills || ['Problem Solving', 'Data Structures'],
-            candidateResume: newResume?.name || studentProfile?.resumeFileName || 'Resume.pdf',
+            candidateId: studentProfile?.id || studentProfile?._id || studentEmail,
+            candidateName,
+            candidateEmail: studentEmail,
+            candidateBranch,
+            candidateCgpa,
+            candidateSkills,
+            candidateResume,
+            candidatePhone,
             isSaved: false,
             stage: 1
         };
 
-        applications = [newApp, ...applications.filter(a => a.jobId !== (jobId || job?.id))];
-        res.status(201).json(newApp);
+        // 4. Save or update application
+        const application = await Application.findOneAndUpdate(
+            { jobId: actualJobId, studentEmail },
+            appData,
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+
+        res.status(201).json(application);
     } catch (error) {
+        console.error('Error applying to job:', error);
         res.status(500).json({ message: 'Failed to submit application', error: error.message });
     }
 };
 
-export const updateApplication = (req, res) => {
+// Status -> stage mapping helper
+function statusToStage(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'shortlisted') return 2;
+    if (s === 'assessment') return 3;
+    if (s === 'interview') return 4;
+    if (s === 'offered') return 5;
+    return 1; // New / Applied / Rejected
+}
+
+// Update application by ID
+export const updateApplication = async (req, res) => {
     try {
         const { id } = req.params;
-        const index = applications.findIndex(a => (a.id === id || a._id === id));
-        if (index === -1) {
+
+        // Auto-set stage when status changes
+        const updateData = { ...req.body };
+        if (updateData.status && !updateData.stage) {
+            updateData.stage = statusToStage(updateData.status);
+        }
+
+        const updated = await Application.findByIdAndUpdate(id, updateData, { new: true });
+        if (!updated) {
             return res.status(404).json({ message: 'Application not found' });
         }
-        applications[index] = { ...applications[index], ...req.body };
-        res.status(200).json(applications[index]);
+
+        // Sync with Shortlist collection based on new status
+        if (req.body.status) {
+            const statusLower = req.body.status.toLowerCase();
+
+            if (statusLower === 'shortlisted' || statusLower === 'interview') {
+                // Upsert shortlist record and update its status
+                const shortlistStatus = statusLower === 'interview' ? 'Interview' : 'Shortlisted';
+                await Shortlist.findOneAndUpdate(
+                    { 
+                        $or: [
+                            { applicationId: updated._id },
+                            { jobId: updated.jobId, studentEmail: updated.studentEmail }
+                        ]
+                    },
+                    {
+                        applicationId: updated._id,
+                        jobId: updated.jobId,
+                        recruiterEmail: updated.recruiterEmail,
+                        studentEmail: updated.studentEmail,
+                        candidateName: updated.candidateName,
+                        candidateEmail: updated.candidateEmail || updated.studentEmail,
+                        candidateBranch: updated.candidateBranch,
+                        candidateCgpa: updated.candidateCgpa,
+                        candidateSkills: updated.candidateSkills,
+                        candidateResume: updated.candidateResume,
+                        candidatePhone: updated.candidatePhone,
+                        jobTitle: updated.jobTitle || updated.role,
+                        company: updated.company,
+                        status: shortlistStatus,
+                        shortlistedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    },
+                    { upsert: true, new: true, setDefaultsOnInsert: true }
+                );
+            } else if (statusLower === 'offered' || statusLower === 'rejected') {
+                // Remove from shortlist pool when offered or rejected
+                await Shortlist.deleteMany({
+                    $or: [
+                        { applicationId: updated._id },
+                        { jobId: updated.jobId, studentEmail: updated.studentEmail }
+                    ]
+                });
+            }
+        }
+
+        res.status(200).json(updated);
     } catch (error) {
+        console.error('Error updating application:', error);
         res.status(500).json({ message: 'Failed to update application', error: error.message });
     }
 };
 
-export const deleteApplication = (req, res) => {
+// Delete / withdraw application by ID
+export const deleteApplication = async (req, res) => {
     try {
         const { id } = req.params;
-        const exists = applications.some(a => (a.id === id || a._id === id));
-        if (!exists) {
+        const deleted = await Application.findByIdAndDelete(id);
+        if (!deleted) {
             return res.status(404).json({ message: 'Application not found' });
         }
-        applications = applications.filter(a => (a.id !== id && a._id !== id));
+        await Shortlist.deleteMany({ applicationId: id });
         res.status(200).json({ message: 'Application withdrawn successfully', id });
     } catch (error) {
+        console.error('Error deleting application:', error);
         res.status(500).json({ message: 'Failed to withdraw application', error: error.message });
     }
 };

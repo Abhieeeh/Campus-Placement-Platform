@@ -9,68 +9,65 @@ import { placementService } from '../../services/placementService';
 import './Studentjobs.css';
 
 export default function Studentjobs({ user }) {
-    // Helper to read profile from localStorage
-    const getStoredProfile = () => {
-        let academic = { branch: '', cgpa: '', graduationYear: '', backlogs: '' };
-        let personal = {
-            name: '',
-            dept: '',
-            email: '',
-            phone: '',
-            github: '',
-            linkedin: ''
-        };
+    const userDefaultName = user?.name || (user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Student');
+    const initialStudentProfile = {
+        name: userDefaultName,
+        email: user?.email || '',
+        phone: '',
+        branch: 'CSE',
+        cgpa: '',
+        backlogs: '0',
+        graduationYear: String(new Date().getFullYear() + 1),
+        github: '',
+        linkedin: '',
+        resumeFileName: 'Resume.pdf',
+        resumeFileSize: '',
+        resumeLastUpdated: ''
+    };
 
-        let resume = {
-            name: '',
-            size: '',
-            lastUpdated: ''
-        };
+    const [studentProfile, setStudentProfile] = useState(initialStudentProfile);
 
+    // Fetch student profile from MongoDB collection
+    const fetchProfile = async () => {
+        if (!user?.email) return;
         try {
-            const savedAcademic = localStorage.getItem('student_academic_info');
-            if (savedAcademic) academic = { ...academic, ...JSON.parse(savedAcademic) };
+            const res = await fetch(`http://localhost:5000/api/auth/student-profile/${encodeURIComponent(user.email)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.profile) {
+                    const prof = data.profile;
+                    const personal = prof.personalInfo || {};
+                    const academic = prof.academicInfo || {};
+                    const resume = prof.resume || {};
 
-            const savedPersonal = localStorage.getItem('student_personal_info');
-            if (savedPersonal) personal = { ...personal, ...JSON.parse(savedPersonal) };
-
-            const savedResume = localStorage.getItem('student_resume');
-            if (savedResume) resume = { ...resume, ...JSON.parse(savedResume) };
+                    setStudentProfile({
+                        name: personal.name || userDefaultName,
+                        email: personal.email || user.email,
+                        phone: personal.phone || '',
+                        branch: academic.branch || personal.dept || 'CSE',
+                        cgpa: academic.cgpa !== undefined && academic.cgpa !== '' ? String(academic.cgpa) : '',
+                        backlogs: academic.backlogs !== undefined && academic.backlogs !== '' ? String(academic.backlogs) : '0',
+                        graduationYear: academic.graduationYear || String(new Date().getFullYear() + 1),
+                        github: personal.github || '',
+                        linkedin: personal.linkedin || '',
+                        resumeFileName: resume.name || 'Resume.pdf',
+                        resumeFileSize: resume.size || '',
+                        resumeLastUpdated: resume.lastUpdated || ''
+                    });
+                }
+            }
         } catch (e) {
             // fallback
         }
-
-        return {
-            name: personal.name || user?.name || (user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Abhishek Kumar'),
-            email: personal.email || user?.email || 'abhishek.student@campus.edu',
-            phone: personal.phone || '+91 98765 43210',
-            branch: academic.branch || personal.dept || 'CSE',
-            cgpa: academic.cgpa !== undefined && academic.cgpa !== '' ? String(academic.cgpa) : '8.4',
-            backlogs: academic.backlogs !== undefined && academic.backlogs !== '' ? String(academic.backlogs) : '0',
-            graduationYear: academic.graduationYear || '2028',
-            github: personal.github || 'https://github.com/abhieeeh',
-            linkedin: personal.linkedin || 'https://linkedin.com/in/abhishekk',
-            resumeFileName: resume.name || 'Abhishek_K_Resume.pdf',
-            resumeFileSize: resume.size || '1.4 MB',
-            resumeLastUpdated: resume.lastUpdated || 'Uploaded on Sep 12, 2026'
-        };
     };
 
-    // Student profile info (synced with profile section)
-    const [studentProfile, setStudentProfile] = useState(getStoredProfile);
-
-    // Sync when profile updates in Profile section
-    React.useEffect(() => {
-        const syncProfile = () => {
-            setStudentProfile(getStoredProfile());
-        };
-        window.addEventListener('student_profile_updated', syncProfile);
-        window.addEventListener('storage', syncProfile);
+    useEffect(() => {
+        fetchProfile();
+        window.addEventListener('student_profile_updated', fetchProfile);
         return () => {
-            window.removeEventListener('student_profile_updated', syncProfile);
-            window.removeEventListener('storage', syncProfile);
+            window.removeEventListener('student_profile_updated', fetchProfile);
         };
-    }, []);
+    }, [user?.email]);
 
     // Job posts state (loaded via placementService)
     const [jobs, setJobs] = useState([]);
@@ -136,8 +133,8 @@ export default function Studentjobs({ user }) {
         cgpa: studentProfile.cgpa,
         graduationYear: studentProfile.graduationYear,
         note: '',
-        github: studentProfile.github || 'https://github.com/abhieeeh',
-        linkedin: studentProfile.linkedin || 'https://linkedin.com/in/abhishekk'
+        github: studentProfile.github || '',
+        linkedin: studentProfile.linkedin || ''
     });
 
     // Helper: Check student eligibility for a job (robust against different object schemas)
@@ -192,14 +189,19 @@ export default function Studentjobs({ user }) {
         };
     };
 
-    // Calculate total eligible count across all current jobs
+    // Active open jobs accessible to students
+    const activeJobs = useMemo(() => {
+        return (jobs || []).filter(j => !['closed', 'inactive', 'draft'].includes((j.status || '').toLowerCase()));
+    }, [jobs]);
+
+    // Calculate total eligible count across all current open jobs
     const eligibleJobsCount = useMemo(() => {
-        return (jobs || []).filter(job => checkEligibility(job).isEligible).length;
-    }, [jobs, studentProfile]);
+        return activeJobs.filter(job => checkEligibility(job).isEligible).length;
+    }, [activeJobs, studentProfile]);
 
     // Filter and Search logic
     const filteredJobs = useMemo(() => {
-        return (jobs || []).filter(job => {
+        return activeJobs.filter(job => {
             if (!job) return false;
             const role = (job.role || job.title || '').toLowerCase();
             const company = (job.company || '').toLowerCase();
@@ -225,10 +227,16 @@ export default function Studentjobs({ user }) {
 
             return true;
         });
-    }, [jobs, searchQuery, activeFilter, studentProfile]);
+    }, [activeJobs, searchQuery, activeFilter, studentProfile]);
 
     // Handlers
     const handleOpenApplyModal = (job) => {
+        const status = (job?.status || '').toLowerCase();
+        if (status === 'closed') {
+            alert('This job posting is closed and no longer accepting applications.');
+            return;
+        }
+
         const eligibility = checkEligibility(job);
         if (!eligibility.backlogsOk) {
             alert(`Application Blocked: You have ${studentProfile.backlogs} active backlog(s). Students with active backlogs cannot apply for this drive.`);
@@ -285,12 +293,21 @@ export default function Studentjobs({ user }) {
             backlogs: studentProfile.backlogs
         };
 
-        localStorage.setItem('student_personal_info', JSON.stringify(updatedPersonal));
-        localStorage.setItem('student_academic_info', JSON.stringify(updatedAcademic));
-        if (uploadedNewFile) {
-            localStorage.setItem('student_resume', JSON.stringify(uploadedNewFile));
+        try {
+            await fetch('http://localhost:5000/api/auth/student-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: user?.email || applicationForm.email,
+                    personalInfo: updatedPersonal,
+                    academicInfo: updatedAcademic,
+                    ...(uploadedNewFile && { resume: uploadedNewFile })
+                })
+            });
+            window.dispatchEvent(new Event('student_profile_updated'));
+        } catch (err) {
+            // ignore
         }
-        window.dispatchEvent(new Event('student_profile_updated'));
 
         setStudentProfile(prev => ({
             ...prev,
@@ -310,11 +327,14 @@ export default function Studentjobs({ user }) {
         }));
 
         if (selectedJobForApply) {
-            setAppliedJobIds(prev => new Set(prev).add(selectedJobForApply.id));
-            await placementService.applyToJob(selectedJobForApply, studentProfile, uploadedNewFile);
+            try {
+                await placementService.applyToJob(selectedJobForApply, studentProfile, uploadedNewFile);
+                setAppliedJobIds(prev => new Set(prev).add(selectedJobForApply.id));
+                setApplySuccessState(true);
+            } catch (err) {
+                alert(err.message || 'Failed to submit application');
+            }
         }
-
-        setApplySuccessState(true);
     };
 
     return (
@@ -358,7 +378,7 @@ export default function Studentjobs({ user }) {
                         onClick={() => setActiveFilter('all')}
                     >
                         All Opportunities
-                        <span className="filter-count-badge">{jobs.length}</span>
+                        <span className="filter-count-badge">{activeJobs.length}</span>
                     </button>
                     <button
                         className={`filter-pill ${activeFilter === 'full-time' ? 'active' : ''}`}
@@ -366,7 +386,7 @@ export default function Studentjobs({ user }) {
                     >
                         <Briefcase size={14} /> Full Time
                         <span className="filter-count-badge">
-                            {jobs.filter(j => j.type.toLowerCase() === 'full-time').length}
+                            {activeJobs.filter(j => (j.type || '').toLowerCase() === 'full-time').length}
                         </span>
                     </button>
                     <button
@@ -375,7 +395,7 @@ export default function Studentjobs({ user }) {
                     >
                         <GraduationCap size={14} /> Internship
                         <span className="filter-count-badge">
-                            {jobs.filter(j => j.type.toLowerCase() === 'internship').length}
+                            {activeJobs.filter(j => (j.type || '').toLowerCase() === 'internship').length}
                         </span>
                     </button>
                     <button
@@ -389,7 +409,7 @@ export default function Studentjobs({ user }) {
 
                 {/* Active filter helper text */}
                 <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                    Showing <strong>{filteredJobs.length}</strong> of {jobs.length} roles
+                    Showing <strong>{filteredJobs.length}</strong> of {activeJobs.length} roles
                 </span>
             </div>
 

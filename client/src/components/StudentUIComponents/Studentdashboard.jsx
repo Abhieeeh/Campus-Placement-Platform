@@ -3,7 +3,7 @@ import { Briefcase, CheckCircle, Clock, ChevronRight, Building, MapPin, DollarSi
 import { placementService } from '../../services/placementService';
 import './Studentdashboard.css';
 
-export default function Studentdashboard({ onNavigate }) {
+export default function Studentdashboard({ user, onNavigate }) {
     const [dashboardData, setDashboardData] = useState({
         stats: { totalApplications: 0, shortlisted: 0, interviews: 0 },
         recentApplications: [],
@@ -13,7 +13,8 @@ export default function Studentdashboard({ onNavigate }) {
 
     const loadData = async () => {
         try {
-            const data = await placementService.getDashboardData();
+            const params = user?.email ? { studentEmail: user.email } : {};
+            const data = await placementService.getDashboardData(params);
             setDashboardData(data);
         } catch (e) {
             // handle error
@@ -26,14 +27,20 @@ export default function Studentdashboard({ onNavigate }) {
         loadData();
 
         window.addEventListener('student_applications_updated', loadData);
+        window.addEventListener('recruiter_applications_updated', loadData);
+        window.addEventListener('student_interviews_updated', loadData);
+        window.addEventListener('recruiter_interviews_updated', loadData);
         window.addEventListener('dashboard_stats_updated', loadData);
         window.addEventListener('storage', loadData);
         return () => {
             window.removeEventListener('student_applications_updated', loadData);
+            window.removeEventListener('recruiter_applications_updated', loadData);
+            window.removeEventListener('student_interviews_updated', loadData);
+            window.removeEventListener('recruiter_interviews_updated', loadData);
             window.removeEventListener('dashboard_stats_updated', loadData);
             window.removeEventListener('storage', loadData);
         };
-    }, []);
+    }, [user?.email]);
 
     // Stats dynamically computed
     const stats = [

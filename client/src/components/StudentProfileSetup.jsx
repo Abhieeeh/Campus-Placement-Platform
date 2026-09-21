@@ -142,37 +142,22 @@ export default function StudentProfileSetup({ initialUser, onComplete }) {
         };
 
         try {
-            // 1. Post to backend endpoint (ready for MongoDB integration)
             await fetch('http://localhost:5000/api/auth/student-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            // 2. Cache locally so Student Dashboard displays the profile instantly
-            localStorage.setItem('student_personal_info', JSON.stringify(personalInfo));
-            localStorage.setItem('student_academic_info', JSON.stringify(academicInfo));
-            localStorage.setItem('student_skills', JSON.stringify(skills));
-            localStorage.setItem('student_projects', JSON.stringify(cleanProjects));
             window.dispatchEvent(new Event('student_profile_updated'));
 
-            // 3. Callback to complete registration onboarding and redirect to Login
             onComplete({
                 role: 'student',
-                email: userEmail || personalInfo.email,
-                message: 'Student profile created successfully! Please sign in to access your placement dashboard.'
+                email: userEmail || personalInfo.email
             });
         } catch (error) {
-            console.error('Failed to save student profile:', error);
-            // Fallback: still save locally and proceed
-            localStorage.setItem('student_personal_info', JSON.stringify(personalInfo));
-            localStorage.setItem('student_academic_info', JSON.stringify(academicInfo));
-            localStorage.setItem('student_skills', JSON.stringify(skills));
-            localStorage.setItem('student_projects', JSON.stringify(cleanProjects));
             onComplete({
                 role: 'student',
-                email: userEmail || personalInfo.email,
-                message: 'Profile created! You can now log in.'
+                email: userEmail || personalInfo.email
             });
         } finally {
             setIsSubmitting(false);
@@ -502,7 +487,7 @@ export default function StudentProfileSetup({ initialUser, onComplete }) {
                                     className="sps-btn sps-btn-primary"
                                     disabled={isSubmitting}
                                 >
-                                    {isSubmitting ? 'Saving Profile...' : 'Complete Profile & Continue to Login'}
+                                    {isSubmitting ? 'Saving Profile...' : 'Complete Profile & Launch Dashboard'}
                                     {!isSubmitting && <CheckCircle2 size={16} />}
                                 </button>
                             </div>

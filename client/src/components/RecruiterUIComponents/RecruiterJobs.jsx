@@ -48,8 +48,8 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
     const loadData = async () => {
         try {
             const [jList, aList] = await Promise.all([
-                recruiterService.getJobs(),
-                recruiterService.getApplications()
+                recruiterService.getJobs({ recruiterEmail: user?.email }),
+                recruiterService.getApplications({ recruiterEmail: user?.email })
             ]);
             setJobs(jList);
             setApplications(aList);
@@ -79,13 +79,13 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
     const handleOpenCreate = async () => {
         let companyProfile = {};
         try {
-            companyProfile = await recruiterService.getCompanyProfile();
+            companyProfile = await recruiterService.getCompanyProfile(user?.email);
         } catch (e) { /* fallback */ }
 
         setEditingJob(null);
         setFormData({
             role: '',
-            company: companyProfile?.companyName || 'TechCorp Solutions',
+            company: companyProfile?.companyName || user?.name || 'Company',
             location: 'Bengaluru, India (Hybrid)',
             type: 'Full-time',
             salary: '₹14 - 18 LPA',
@@ -152,6 +152,7 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
 
         const payload = {
             ...formData,
+            recruiterEmail: user?.email,
             title: formData.role, // ensure compatibility
             responsibilities: typeof formData.responsibilities === 'string'
                 ? formData.responsibilities.split('\n').filter(r => r.trim())
@@ -159,10 +160,16 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
             qualifications: typeof formData.qualifications === 'string'
                 ? formData.qualifications.split('\n').filter(q => q.trim())
                 : formData.qualifications,
+            criteria: {
+                minCgpa: formData.minCgpa || 0,
+                maxBacklogs: 0,
+                eligibleBranches: formData.branches || ['All Branches'],
+                graduationYear: '2027'
+            }
         };
 
         if (editingJob) {
-            await recruiterService.updateJob(editingJob.id, payload);
+            await recruiterService.updateJob(editingJob.id || editingJob._id, payload);
         } else {
             await recruiterService.createJob(payload);
         }
