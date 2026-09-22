@@ -18,10 +18,13 @@ export const getShortlists = async (req, res) => {
     }
 };
 
-// Get shortlisted records for a student
+// Get shortlisted records for a student (accepts email in body, query, or params)
 export const getShortlistsByStudent = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Student email is required' });
+        }
         const list = await Shortlist.find({ studentEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(list);
     } catch (error) {
@@ -30,10 +33,13 @@ export const getShortlistsByStudent = async (req, res) => {
     }
 };
 
-// Get shortlisted records for a recruiter
+// Get shortlisted records for a recruiter (accepts email in body, query, or params)
 export const getShortlistsByRecruiter = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Recruiter email is required' });
+        }
         const list = await Shortlist.find({ recruiterEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(list);
     } catch (error) {

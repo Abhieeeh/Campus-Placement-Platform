@@ -5,6 +5,7 @@ import {
     ExternalLink, Globe
 } from 'lucide-react';
 import './Studentprofile.css';
+import { authFetch } from '../../utils/api';
 
 function nameFromEmail(email = '') {
     return email
@@ -51,7 +52,11 @@ export default function Studentprofile({ user }) {
     const fetchStudentProfile = async () => {
         if (!user?.email) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/auth/student-profile/${encodeURIComponent(user.email)}`);
+            const res = await authFetch('http://localhost:5000/api/auth/student-profile/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
             if (res.ok) {
                 const data = await res.json();
                 if (data?.profile) {
@@ -95,7 +100,7 @@ export default function Studentprofile({ user }) {
 
     const saveProfileToBackend = async (personal, academic, updatedSkills, updatedProjects, updatedResume) => {
         try {
-            await fetch('http://localhost:5000/api/auth/student-profile', {
+            await authFetch('http://localhost:5000/api/auth/student-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

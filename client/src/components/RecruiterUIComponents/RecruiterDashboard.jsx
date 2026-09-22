@@ -4,9 +4,9 @@ import {
     PlusCircle, ArrowRight, Eye, CheckCircle,
     Building, MapPin, Clock, Award, Sparkles, ChevronRight
 } from 'lucide-react';
-import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterDashboard.css';
+import { authFetch } from '../../utils/api';
 
 export default function RecruiterDashboard({ user, onNavigate, onPostJob, onScheduleInterview }) {
     const [stats, setStats] = useState({
@@ -16,7 +16,8 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
         upcomingInterviews: 0,
         offered: 0,
         recentApplications: [],
-        allJobs: []
+        allJobs: [],
+        allApplications: []
     });
     const [loading, setLoading] = useState(true);
     const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -24,8 +25,16 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
 
     const loadData = async () => {
         try {
-            const data = await recruiterService.getDashboardStats({ recruiterEmail: user?.email });
-            setStats(data);
+            if (!user?.email) return;
+            const res = await authFetch('http://localhost:5000/api/dashboard/stats/recruiter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data);
+            }
         } catch (e) {
             console.error('Failed to load recruiter stats:', e);
         } finally {
@@ -44,20 +53,55 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
             window.removeEventListener('recruiter_applications_updated', loadData);
             window.removeEventListener('recruiter_interviews_updated', loadData);
         };
-    }, []);
+    }, [user?.email]);
+
+    const getCandidateProfile = async (email, app) => {
+        try {
+            const res = await authFetch('http://localhost:5000/api/auth/student-profile/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.profile) return data.profile;
+            }
+        } catch (e) {
+            console.error('Error fetching candidate profile:', e);
+        }
+        return {
+            name: app.candidateName || 'Candidate',
+            email: app.studentEmail || app.candidateEmail || email,
+            branch: app.candidateBranch || 'CSE',
+            cgpa: app.candidateCgpa || 0,
+            skills: app.candidateSkills || [],
+            resume: { name: app.candidateResume || 'Resume.pdf' }
+        };
+    };
 
     const handleViewCandidate = async (app) => {
         const email = app.studentEmail || app.candidateEmail;
-        const cand = await recruiterService.getCandidateProfile(email, app);
+        const cand = await getCandidateProfile(email, app);
         setSelectedCandidate(cand);
         setSelectedApplication(app);
     };
 
     const handleStatusChange = async (appId, newStatus) => {
         const targetId = appId?._id || appId?.id || appId;
-        await recruiterService.updateApplicationStatus(targetId, newStatus);
-        setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
-        loadData();
+        try {
+            const res = await authFetch(`http://localhost:5000/api/applications/${targetId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            if (res.ok) {
+                setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
+                loadData();
+                window.dispatchEvent(new Event('recruiter_applications_updated'));
+            }
+        } catch (err) {
+            console.error('Failed to update application status:', err);
+        }
     };
 
     const kpiCards = [
@@ -153,7 +197,7 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
                                 </thead>
                                 <tbody>
                                     {stats.recentApplications.map(app => (
-                                        <tr key={app.id}>
+                                        <tr key={app._id || app.id}>
                                             <td>
                                                 <div className="rd-candidate-cell">
                                                     <div className="rd-candidate-avatar">
@@ -167,14 +211,14 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
                                             </td>
                                             <td>
                                                 <span style={{ fontWeight: 500, color: '#1e293b' }}>
-                                                    {app.jobTitle || 'Software Engineer'}
+                                                    {app.jobTitle || app.role || 'Software Engineer'}
                                                 </span>
                                             </td>
                                             <td>
                                                 <strong style={{ color: '#0f766e' }}>{app.candidateCgpa}</strong>
                                             </td>
                                             <td>
-                                                <span className={`rec-badge ${app.status.toLowerCase()}`}>
+                                                <span className={`rec-badge ${(app.status || 'new').toLowerCase()}`}>
                                                     {app.status}
                                                 </span>
                                             </td>
@@ -215,7 +259,7 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
                             </div>
                         ) : (
                             stats.allJobs.slice(0, 5).map(job => (
-                                <div key={job.id} className="rd-job-row">
+                                <div key={job._id || job.id} className="rd-job-row">
                                     <div className="rd-job-info">
                                         <h4>{job.role || job.title}</h4>
                                         <div className="rd-job-meta">
@@ -228,7 +272,7 @@ export default function RecruiterDashboard({ user, onNavigate, onPostJob, onSche
                                     </div>
                                     <div className="rd-job-applicants-count">
                                         <div className="rd-job-count-num">
-                                            {stats.allApplications.filter(a => a.jobId === job.id).length || job.applicantsCount || 0}
+                                            {(stats.allApplications || []).filter(a => a.jobId === (job._id || job.id)).length || job.applicantsCount || 0}
                                         </div>
                                         <div className="rd-job-count-lbl">Applicants</div>
                                     </div>

@@ -4,6 +4,7 @@ import {
     Calendar, AlertTriangle, Plus, Trash2, CheckCircle2,
     ArrowRight, Sparkles, FolderGit2, Code2, Link as LinkIcon
 } from 'lucide-react';
+import { authFetch } from '../utils/api';
 import './StudentProfileSetup.css';
 
 const SUGGESTED_SKILLS = [
@@ -142,7 +143,7 @@ export default function StudentProfileSetup({ initialUser, onComplete }) {
         };
 
         try {
-            await fetch('http://localhost:5000/api/auth/student-profile', {
+            await authFetch('http://localhost:5000/api/auth/student-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

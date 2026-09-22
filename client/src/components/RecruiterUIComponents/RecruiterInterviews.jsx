@@ -4,9 +4,9 @@ import {
     CheckCircle, XCircle, PlusCircle, ExternalLink,
     Eye, Edit3, MessageSquare, AlertCircle, X, Check
 } from 'lucide-react';
-import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterInterviews.css';
+import { authFetch } from '../../utils/api';
 
 export default function RecruiterInterviews({ user, initialScheduleTarget, onScheduleHandled }) {
     const [interviews, setInterviews] = useState([]);
@@ -44,15 +44,30 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
 
     const loadData = async () => {
         try {
-            const params = user?.email ? { recruiterEmail: user.email } : {};
-            const [intList, appList, jList] = await Promise.all([
-                recruiterService.getInterviews(params),
-                recruiterService.getApplications(params),
-                recruiterService.getJobs(params)
+            if (!user?.email) return;
+            const [intRes, appRes, jobRes] = await Promise.all([
+                authFetch('http://localhost:5000/api/interviews/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                }),
+                authFetch('http://localhost:5000/api/applications/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                }),
+                authFetch('http://localhost:5000/api/jobs/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                })
             ]);
-            setInterviews(intList);
-            setApplications(appList);
-            setJobs(jList);
+            const intList = intRes.ok ? await intRes.json() : [];
+            const appList = appRes.ok ? await appRes.json() : [];
+            const jList = jobRes.ok ? await jobRes.json() : [];
+            setInterviews(intList || []);
+            setApplications(appList || []);
+            setJobs(jList || []);
         } catch (e) {
             console.error('Failed to load interviews:', e);
         }
@@ -69,7 +84,7 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
         };
     }, [user?.email]);
 
-    // If passed target from another screen (like shortlist or applications)
+    // If passed target from another screen
     useEffect(() => {
         if (initialScheduleTarget) {
             const { candidate, application } = initialScheduleTarget;
@@ -102,7 +117,7 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
             studentEmail: sEmail,
             candidateBranch: firstApp ? firstApp.candidateBranch : 'CSE',
             candidateCgpa: firstApp ? firstApp.candidateCgpa : 8.5,
-            jobId: firstApp ? firstApp.jobId : (jobs[0]?.id || jobs[0]?._id || ''),
+            jobId: firstApp ? firstApp.jobId : (jobs[0]?._id || jobs[0]?.id || ''),
             jobTitle: firstApp ? (firstApp.jobTitle || firstApp.role) : (jobs[0]?.role || 'Software Engineer'),
             company: firstApp?.company || jobs[0]?.company || 'Company',
             date: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
@@ -138,27 +153,41 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
 
     const handleScheduleSubmit = async (e) => {
         e.preventDefault();
-        // Format display date
         let displayDate = scheduleForm.date;
         try {
             const d = new Date(scheduleForm.date);
             displayDate = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
         } catch (err) { /* ignore */ }
 
-        await recruiterService.scheduleInterview({
-            ...scheduleForm,
-            recruiterEmail: user?.email || '',
-            displayDate
-        });
-
-        setShowScheduleModal(false);
-        loadData();
+        try {
+            const res = await authFetch('http://localhost:5000/api/interviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...scheduleForm,
+                    recruiterEmail: user?.email || '',
+                    displayDate
+                })
+            });
+            if (res.ok) {
+                setShowScheduleModal(false);
+                loadData();
+                window.dispatchEvent(new Event('recruiter_interviews_updated'));
+            }
+        } catch (err) {
+            console.error('Error scheduling interview:', err);
+        }
     };
 
     const handleCancelInterview = async (id) => {
         if (window.confirm('Are you sure you want to cancel this scheduled interview?')) {
-            await recruiterService.cancelInterview(id);
-            loadData();
+            try {
+                await authFetch(`http://localhost:5000/api/interviews/${id}`, { method: 'DELETE' });
+                loadData();
+                window.dispatchEvent(new Event('recruiter_interviews_updated'));
+            } catch (err) {
+                console.error('Error cancelling interview:', err);
+            }
         }
     };
 
@@ -166,39 +195,64 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
         e.preventDefault();
         if (!evaluatingInterview) return;
 
-        await recruiterService.updateInterview(evaluatingInterview.id, {
-            status: 'completed',
-            result: evalResult,
-            feedback: evalFeedback || (evalResult === 'Selected' ? 'Candidate performed exceptionally well.' : 'Candidate needs further improvement.')
-        });
+        const targetId = evaluatingInterview._id || evaluatingInterview.id;
+        try {
+            await authFetch(`http://localhost:5000/api/interviews/${targetId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'completed',
+                    result: evalResult,
+                    feedback: evalFeedback || (evalResult === 'Selected' ? 'Candidate performed exceptionally well.' : 'Candidate needs further improvement.')
+                })
+            });
 
-        // Also update application status
-        if (evaluatingInterview.applicationId) {
-            await recruiterService.updateApplicationStatus(
-                evaluatingInterview.applicationId,
-                evalResult === 'Selected' ? 'Offered' : 'Rejected'
-            );
+            if (evaluatingInterview.applicationId) {
+                await authFetch(`http://localhost:5000/api/applications/${evaluatingInterview.applicationId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: evalResult === 'Selected' ? 'Offered' : 'Rejected' })
+                });
+            }
+
+            setEvaluatingInterview(null);
+            setEvalFeedback('');
+            loadData();
+            window.dispatchEvent(new Event('recruiter_interviews_updated'));
+        } catch (err) {
+            console.error('Error recording interview evaluation:', err);
         }
-
-        setEvaluatingInterview(null);
-        setEvalFeedback('');
-        loadData();
     };
 
-    const handleViewCandidate = (interview) => {
-        const cand = recruiterService.getCandidateById(interview.candidateId) || {
-            id: interview.candidateId,
-            name: interview.candidateName,
-            email: `${interview.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-            branch: interview.candidateBranch,
-            cgpa: interview.candidateCgpa,
+    const getCandidateProfile = async (email, interview) => {
+        try {
+            const res = await authFetch('http://localhost:5000/api/auth/student-profile/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.profile) return data.profile;
+            }
+        } catch (e) {
+            console.error('Error fetching candidate profile:', e);
+        }
+        return {
+            name: interview.candidateName || 'Candidate',
+            email: interview.studentEmail || interview.candidateEmail || email,
+            branch: interview.candidateBranch || 'CSE',
+            cgpa: interview.candidateCgpa || 0,
             skills: ['Problem Solving', 'Data Structures', 'Communication'],
-            resumeName: `${interview.candidateName.replace(/\s+/g, '_')}_Resume.pdf`,
-            projects: [],
-            experience: []
+            resume: { name: `${interview.candidateName?.replace(/\s+/g, '_')}_Resume.pdf` }
         };
-        const app = applications.find(a => a.candidateId === interview.candidateId) || {
-            id: interview.applicationId || 'APP-01',
+    };
+
+    const handleViewCandidate = async (interview) => {
+        const email = interview.studentEmail || interview.candidateEmail;
+        const cand = await getCandidateProfile(email, interview);
+        const app = applications.find(a => (a.candidateId === interview.candidateId || a._id === interview.applicationId)) || {
+            _id: interview.applicationId || 'APP-01',
             jobTitle: interview.jobTitle,
             status: interview.status === 'completed' ? interview.result || 'Interview' : 'Interview'
         };
@@ -254,113 +308,116 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
                 </div>
             ) : (
                 <div className="ri-cards-list">
-                    {filteredInterviews.map(item => (
-                        <div key={item.id} className="ri-interview-card">
-                            <div className="ri-card-top">
-                                <div className="ri-cand-main">
-                                    <div className="ri-cand-avatar">
-                                        {item.candidateName ? item.candidateName[0] : 'C'}
-                                    </div>
-                                    <div className="ri-cand-titles">
-                                        <h3>{item.candidateName}</h3>
-                                        <div className="ri-job-tag">
-                                            <Briefcase size={14} />
-                                            <span>{item.jobTitle}</span>
-                                            <span>•</span>
-                                            <span style={{ color: '#0f766e', fontWeight: 600 }}>{item.candidateBranch} (CGPA: {item.candidateCgpa})</span>
+                    {filteredInterviews.map(item => {
+                        const targetId = item._id || item.id;
+                        return (
+                            <div key={targetId} className="ri-interview-card">
+                                <div className="ri-card-top">
+                                    <div className="ri-cand-main">
+                                        <div className="ri-cand-avatar">
+                                            {item.candidateName ? item.candidateName[0] : 'C'}
+                                        </div>
+                                        <div className="ri-cand-titles">
+                                            <h3>{item.candidateName}</h3>
+                                            <div className="ri-job-tag">
+                                                <Briefcase size={14} />
+                                                <span>{item.jobTitle}</span>
+                                                <span>•</span>
+                                                <span style={{ color: '#0f766e', fontWeight: 600 }}>{item.candidateBranch} (CGPA: {item.candidateCgpa})</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                <div>
-                                    <span className={`rec-badge ${item.status === 'scheduled' ? 'interview' : item.status === 'completed' ? (item.result === 'Selected' ? 'offered' : 'rejected') : 'closed'}`}>
-                                        {item.status === 'completed' ? `Completed • ${item.result || 'Done'}` : item.status}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Details Grid */}
-                            <div className="ri-details-grid">
-                                <div className="ri-detail-item">
-                                    <Calendar size={15} />
-                                    <span>Date: <strong>{item.displayDate || item.date}</strong></span>
-                                </div>
-                                <div className="ri-detail-item">
-                                    <Clock size={15} />
-                                    <span>Time: <strong>{item.time}</strong></span>
-                                </div>
-                                <div className="ri-detail-item">
-                                    <CheckCircle size={15} />
-                                    <span>Round: <strong>{item.round}</strong></span>
-                                </div>
-                                <div className="ri-detail-item">
-                                    <Video size={15} />
-                                    <span>Platform: <strong>{item.platform || 'Google Meet'}</strong></span>
-                                </div>
-                            </div>
-
-                            {/* Evaluation result box if completed */}
-                            {item.status === 'completed' && (
-                                <div className={`ri-feedback-box ${item.result === 'Not Selected' ? 'not-selected' : ''}`}>
-                                    <div style={{ fontWeight: 700, marginBottom: '0.2rem' }}>
-                                        Interviewer Assessment Result: {item.result}
-                                    </div>
-                                    <div style={{ fontSize: '0.84rem' }}>
-                                        {item.feedback || 'No evaluation notes recorded.'}
+                                    <div>
+                                        <span className={`rec-badge ${item.status === 'scheduled' ? 'interview' : item.status === 'completed' ? (item.result === 'Selected' ? 'offered' : 'rejected') : 'closed'}`}>
+                                            {item.status === 'completed' ? `Completed • ${item.result || 'Done'}` : item.status}
+                                        </span>
                                     </div>
                                 </div>
-                            )}
 
-                            {/* Card Footer */}
-                            <div className="ri-card-footer">
-                                <div>
-                                    {item.status === 'scheduled' && item.meetLink && (
-                                        <a
-                                            href={item.meetLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="ri-meet-link-btn"
+                                {/* Details Grid */}
+                                <div className="ri-details-grid">
+                                    <div className="ri-detail-item">
+                                        <Calendar size={15} />
+                                        <span>Date: <strong>{item.displayDate || item.date}</strong></span>
+                                    </div>
+                                    <div className="ri-detail-item">
+                                        <Clock size={15} />
+                                        <span>Time: <strong>{item.time}</strong></span>
+                                    </div>
+                                    <div className="ri-detail-item">
+                                        <CheckCircle size={15} />
+                                        <span>Round: <strong>{item.round}</strong></span>
+                                    </div>
+                                    <div className="ri-detail-item">
+                                        <Video size={15} />
+                                        <span>Platform: <strong>{item.platform || 'Google Meet'}</strong></span>
+                                    </div>
+                                </div>
+
+                                {/* Evaluation result box if completed */}
+                                {item.status === 'completed' && (
+                                    <div className={`ri-feedback-box ${item.result === 'Not Selected' ? 'not-selected' : ''}`}>
+                                        <div style={{ fontWeight: 700, marginBottom: '0.2rem' }}>
+                                            Interviewer Assessment Result: {item.result}
+                                        </div>
+                                        <div style={{ fontSize: '0.84rem' }}>
+                                            {item.feedback || 'No evaluation notes recorded.'}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Card Footer */}
+                                <div className="ri-card-footer">
+                                    <div>
+                                        {item.status === 'scheduled' && (item.meetLink || item.meetingLink) && (
+                                            <a
+                                                href={item.meetLink || item.meetingLink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="ri-meet-link-btn"
+                                            >
+                                                <Video size={14} /> Join {item.platform || 'Meeting'} <ExternalLink size={12} />
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    <div className="ri-actions-btns">
+                                        <button
+                                            className="rd-action-btn-sm"
+                                            onClick={() => handleViewCandidate(item)}
                                         >
-                                            <Video size={14} /> Join {item.platform || 'Meeting'} <ExternalLink size={12} />
-                                        </a>
-                                    )}
-                                </div>
+                                            <Eye size={13} /> Candidate Profile
+                                        </button>
 
-                                <div className="ri-actions-btns">
-                                    <button
-                                        className="rd-action-btn-sm"
-                                        onClick={() => handleViewCandidate(item)}
-                                    >
-                                        <Eye size={13} /> Candidate Profile
-                                    </button>
-
-                                    {item.status === 'scheduled' && (
-                                        <>
-                                            <button
-                                                className="ra-btn-primary"
-                                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                onClick={() => {
-                                                    setEvaluatingInterview(item);
-                                                    setEvalResult('Selected');
-                                                    setEvalFeedback('');
-                                                }}
-                                            >
-                                                <CheckCircle size={13} /> Complete & Evaluate
-                                            </button>
-                                            <button
-                                                className="ra-btn-reject"
-                                                style={{ padding: '0.4rem 0.65rem' }}
-                                                onClick={() => handleCancelInterview(item.id)}
-                                                title="Cancel this interview"
-                                            >
-                                                <XCircle size={14} />
-                                            </button>
-                                        </>
-                                    )}
+                                        {item.status === 'scheduled' && (
+                                            <>
+                                                <button
+                                                    className="ra-btn-primary"
+                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                    onClick={() => {
+                                                        setEvaluatingInterview(item);
+                                                        setEvalResult('Selected');
+                                                        setEvalFeedback('');
+                                                    }}
+                                                >
+                                                    <CheckCircle size={13} /> Complete & Evaluate
+                                                </button>
+                                                <button
+                                                    className="ra-btn-reject"
+                                                    style={{ padding: '0.4rem 0.65rem' }}
+                                                    onClick={() => handleCancelInterview(targetId)}
+                                                    title="Cancel this interview"
+                                                >
+                                                    <XCircle size={14} />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
@@ -386,8 +443,8 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
                                         required
                                     >
                                         {applications.map(app => (
-                                            <option key={app.id} value={app.candidateId}>
-                                                {app.candidateName} — {app.jobTitle} ({app.candidateBranch}, CGPA: {app.candidateCgpa})
+                                            <option key={app._id || app.id} value={app.candidateId || app._id || app.id}>
+                                                {app.candidateName} — {app.jobTitle || app.role} ({app.candidateBranch}, CGPA: {app.candidateCgpa})
                                             </option>
                                         ))}
                                     </select>
@@ -551,8 +608,17 @@ export default function RecruiterInterviews({ user, initialScheduleTarget, onSch
                         setSelectedApplication(null);
                     }}
                     onStatusChange={async (appId, status) => {
-                        await recruiterService.updateApplicationStatus(appId, status);
-                        loadData();
+                        const targetId = appId?._id || appId?.id || appId;
+                        try {
+                            await authFetch(`http://localhost:5000/api/applications/${targetId}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status })
+                            });
+                            loadData();
+                        } catch (e) {
+                            console.error('Error updating application status:', e);
+                        }
                     }}
                 />
             )}

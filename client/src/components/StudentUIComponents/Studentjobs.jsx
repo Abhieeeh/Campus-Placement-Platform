@@ -5,8 +5,8 @@ import {
     Sparkles, Filter, Check, Edit2, FileText, ExternalLink, ArrowRight,
     GraduationCap, Award, Info
 } from 'lucide-react';
-import { placementService } from '../../services/placementService';
 import './Studentjobs.css';
+import { authFetch } from '../../utils/api';
 
 export default function Studentjobs({ user }) {
     const userDefaultName = user?.name || (user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Student');
@@ -27,11 +27,15 @@ export default function Studentjobs({ user }) {
 
     const [studentProfile, setStudentProfile] = useState(initialStudentProfile);
 
-    // Fetch student profile from MongoDB collection
+    // Fetch student profile from MongoDB collection via direct POST fetch
     const fetchProfile = async () => {
         if (!user?.email) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/auth/student-profile/${encodeURIComponent(user.email)}`);
+            const res = await authFetch('http://localhost:5000/api/auth/student-profile/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
             if (res.ok) {
                 const data = await res.json();
                 if (data?.profile) {
@@ -57,7 +61,7 @@ export default function Studentjobs({ user }) {
                 }
             }
         } catch (e) {
-            // fallback
+            console.error('Error fetching student profile:', e);
         }
     };
 
@@ -69,7 +73,7 @@ export default function Studentjobs({ user }) {
         };
     }, [user?.email]);
 
-    // Job posts state (loaded via placementService)
+    // Job posts state (loaded via direct fetch calls)
     const [jobs, setJobs] = useState([]);
     const [appliedJobIds, setAppliedJobIds] = useState(new Set());
     const [loadingJobs, setLoadingJobs] = useState(true);
@@ -77,11 +81,10 @@ export default function Studentjobs({ user }) {
     useEffect(() => {
         const fetchJobs = async () => {
             try {
-                const data = await placementService.getJobs();
-                if (Array.isArray(data) && data.length > 0) {
-                    setJobs(data);
-                } else {
-                    setJobs(placementService.INITIAL_DB_JOBS || []);
+                const res = await authFetch('http://localhost:5000/api/jobs');
+                if (res.ok) {
+                    const data = await res.json();
+                    setJobs(Array.isArray(data) ? data : []);
                 }
             } catch (e) {
                 console.error('Failed to load jobs:', e);
@@ -91,13 +94,21 @@ export default function Studentjobs({ user }) {
         };
         fetchJobs();
 
-        // Sync applied job IDs
+        // Sync applied job IDs via direct fetch call
         const syncApplied = async () => {
+            if (!user?.email) return;
             try {
-                const apps = await placementService.getApplications();
-                setAppliedJobIds(new Set((apps || []).map(a => a.jobId)));
+                const res = await authFetch('http://localhost:5000/api/applications/by-student', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                });
+                if (res.ok) {
+                    const apps = await res.json();
+                    setAppliedJobIds(new Set((apps || []).map(a => a.jobId)));
+                }
             } catch (e) {
-                // ignore
+                console.error('Failed to sync applied jobs:', e);
             }
         };
         syncApplied();
@@ -110,7 +121,7 @@ export default function Studentjobs({ user }) {
             window.removeEventListener('recruiter_jobs_updated', fetchJobs);
             window.removeEventListener('storage', fetchJobs);
         };
-    }, []);
+    }, [user?.email]);
 
     // Search and filter states
     const [searchQuery, setSearchQuery] = useState('');
@@ -137,7 +148,7 @@ export default function Studentjobs({ user }) {
         linkedin: studentProfile.linkedin || ''
     });
 
-    // Helper: Check student eligibility for a job (robust against different object schemas)
+    // Helper: Check student eligibility for a job
     const checkEligibility = (jobOrCriteria) => {
         if (!jobOrCriteria) {
             return {
@@ -294,7 +305,7 @@ export default function Studentjobs({ user }) {
         };
 
         try {
-            await fetch('http://localhost:5000/api/auth/student-profile', {
+            await authFetch('http://localhost:5000/api/auth/student-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -328,9 +339,29 @@ export default function Studentjobs({ user }) {
 
         if (selectedJobForApply) {
             try {
-                await placementService.applyToJob(selectedJobForApply, studentProfile, uploadedNewFile);
-                setAppliedJobIds(prev => new Set(prev).add(selectedJobForApply.id));
-                setApplySuccessState(true);
+                const targetJobId = selectedJobForApply._id || selectedJobForApply.id;
+                const res = await authFetch('http://localhost:5000/api/applications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jobId: targetJobId,
+                        studentProfile: {
+                            ...studentProfile,
+                            ...updatedPersonal,
+                            ...updatedAcademic
+                        },
+                        newResume: uploadedNewFile
+                    })
+                });
+
+                if (res.ok) {
+                    setAppliedJobIds(prev => new Set(prev).add(targetJobId));
+                    setApplySuccessState(true);
+                    window.dispatchEvent(new Event('student_applications_updated'));
+                } else {
+                    const errData = await res.json().catch(() => ({}));
+                    alert(errData.message || 'Failed to submit application');
+                }
             } catch (err) {
                 alert(err.message || 'Failed to submit application');
             }
@@ -446,7 +477,8 @@ export default function Studentjobs({ user }) {
                 ) : (
                     filteredJobs.map((job) => {
                         const eligibility = checkEligibility(job);
-                        const isApplied = appliedJobIds.has(job.id);
+                        const jobId = job._id || job.id;
+                        const isApplied = appliedJobIds.has(jobId);
                         const role = job.role || job.title || 'Software Engineer';
                         const company = job.company || 'Company';
                         const color = job.color || 'linear-gradient(135deg, #0d9488, #059669)';
@@ -457,7 +489,7 @@ export default function Studentjobs({ user }) {
                         const skills = Array.isArray(job.skills) ? job.skills : [];
 
                         return (
-                            <div key={job.id} className="job-card-wrapper">
+                            <div key={jobId} className="job-card-wrapper">
                                 <div>
                                     {/* Top: Brand & Badge */}
                                     <div className="job-card-top">
@@ -563,7 +595,8 @@ export default function Studentjobs({ user }) {
             {selectedJobForDetails && (() => {
                 const job = selectedJobForDetails;
                 const eligibility = checkEligibility(job);
-                const isApplied = appliedJobIds.has(job.id);
+                const jobId = job._id || job.id;
+                const isApplied = appliedJobIds.has(jobId);
                 const role = job.role || job.title || 'Software Engineer';
                 const company = job.company || 'Company';
                 const color = job.color || 'linear-gradient(135deg, #0d9488, #059669)';
@@ -736,7 +769,7 @@ export default function Studentjobs({ user }) {
                                     </div>
                                     <h3>Application Successfully Submitted!</h3>
                                     <p>
-                                        Your application for <strong>{selectedJobForApply.role}</strong> at <strong>{selectedJobForApply.company}</strong> has been received with your updated profile details and resume.
+                                        Your application for <strong>{selectedJobForApply.role || selectedJobForApply.title}</strong> at <strong>{selectedJobForApply.company}</strong> has been received with your updated profile details and resume.
                                     </p>
                                     <button
                                         className="btn-primary"
@@ -753,7 +786,7 @@ export default function Studentjobs({ user }) {
                                     {/* Application Target Banner */}
                                     <div className="apply-summary-banner">
                                         <div>
-                                            <h4>{selectedJobForApply.role}</h4>
+                                            <h4>{selectedJobForApply.role || selectedJobForApply.title}</h4>
                                             <p>{selectedJobForApply.company} • {selectedJobForApply.type} • {selectedJobForApply.salary}</p>
                                         </div>
                                         <span className="job-type-badge full-time">Drive Active</span>

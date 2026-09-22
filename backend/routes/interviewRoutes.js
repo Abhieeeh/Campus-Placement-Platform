@@ -13,7 +13,9 @@ const router = express.Router();
 
 router.get('/', getInterviews);
 router.get('/by-recruiter/:email', getInterviewsByRecruiter);
+router.post('/by-recruiter', getInterviewsByRecruiter);
 router.get('/by-student/:email', getInterviewsByStudent);
+router.post('/by-student', getInterviewsByStudent);
 router.get('/:id', getInterviewById);
 router.post('/', scheduleInterview);
 router.put('/:id', updateInterview);

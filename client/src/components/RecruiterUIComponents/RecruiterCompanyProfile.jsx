@@ -4,8 +4,8 @@ import {
     GraduationCap, Award, Edit, Check, X,
     ShieldCheck, PlusCircle
 } from 'lucide-react';
-import { recruiterService } from '../../services/recruiterService';
 import './RecruiterCompanyProfile.css';
+import { authFetch } from '../../utils/api';
 
 function nameFromEmail(email = '') {
     if (!email) return 'Recruiter';
@@ -36,17 +36,26 @@ export default function RecruiterCompanyProfile({ user }) {
 
     useEffect(() => {
         const fetchProfile = async () => {
+            if (!userEmail) return;
             try {
-                const loaded = await recruiterService.getCompanyProfile(userEmail);
-                if (loaded && typeof loaded === 'object') {
-                    const normalized = {
-                        ...initialProfile,
-                        ...loaded,
-                        email: userEmail || loaded.email || initialProfile.email,
-                        hiringBranches: Array.isArray(loaded.hiringBranches) ? loaded.hiringBranches : initialProfile.hiringBranches
-                    };
-                    setProfile(normalized);
-                    setFormData(normalized);
+                const res = await authFetch('http://localhost:5000/api/auth/recruiter-profile/get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.profile) {
+                        const loaded = data.profile;
+                        const normalized = {
+                            ...initialProfile,
+                            ...loaded,
+                            email: userEmail || loaded.email || initialProfile.email,
+                            hiringBranches: Array.isArray(loaded.hiringBranches) ? loaded.hiringBranches : initialProfile.hiringBranches
+                        };
+                        setProfile(normalized);
+                        setFormData(normalized);
+                    }
                 }
             } catch (err) {
                 console.error('Failed to load profile:', err);
@@ -77,16 +86,27 @@ export default function RecruiterCompanyProfile({ user }) {
     const handleSave = async (e) => {
         e.preventDefault();
         try {
-            const updated = await recruiterService.updateCompanyProfile(formData, userEmail);
-            const normalized = {
-                ...initialProfile,
-                ...(updated || formData),
-                email: userEmail
-            };
-            setProfile(normalized);
-            setIsEditing(false);
-            setSaveFeedback(true);
-            setTimeout(() => setSaveFeedback(false), 3000);
+            const res = await authFetch('http://localhost:5000/api/auth/recruiter-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: userEmail,
+                    companyProfile: formData
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const updated = data?.data?.companyProfile || formData;
+                const normalized = {
+                    ...initialProfile,
+                    ...updated,
+                    email: userEmail
+                };
+                setProfile(normalized);
+                setIsEditing(false);
+                setSaveFeedback(true);
+                setTimeout(() => setSaveFeedback(false), 3000);
+            }
         } catch (err) {
             console.error('Failed to update company profile:', err);
         }

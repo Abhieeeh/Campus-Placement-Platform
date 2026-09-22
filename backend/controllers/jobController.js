@@ -1,4 +1,7 @@
 import Job from "../models/job.js";
+import user from "../models/user.js";
+import Notification from "../models/notification.js";
+import { getIO } from "../socket.js";
 
 // Get all jobs (with optional query filters)
 export const getJobs = async (req, res) => {
@@ -33,10 +36,13 @@ export const getJobs = async (req, res) => {
     }
 };
 
-// Get jobs posted by a specific recruiter via route parameter
+// Get jobs posted by a specific recruiter (accepts email in body, query, or params)
 export const getJobsByRecruiter = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Recruiter email is required' });
+        }
         const jobs = await Job.find({ recruiterEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(jobs);
     } catch (error) {
@@ -69,6 +75,63 @@ export const createJob = async (req, res) => {
             postedDate: 'Just now'
         };
         const newJob = await Job.create(jobData);
+
+        // Capture values from req NOW before setImmediate (req may close after response)
+        const recruiterId = req.user?.userId || null;
+        const companyName = newJob.company || 'A company';
+        const jobRole = newJob.role || newJob.title || 'Software Engineer';
+        const notifMessage = `New job posted: "${jobRole}" at ${companyName}. Check the Jobs section for details!`;
+
+        // Notify ALL students (non-blocking – runs after response is sent)
+        setImmediate(async () => {
+            try {
+                const allStudents = await user.find({ role: 'student' }, '_id');
+                if (allStudents.length === 0) return;
+
+                // 1. Bulk-insert one DB notification per student
+                const notifDocs = allStudents.map(s => ({
+                    senderId: recruiterId || undefined,
+                    receiverId: s._id,
+                    senderRole: 'recruiter',
+                    receiverRole: 'student',
+                    message: notifMessage,
+                    type: 'job',
+                    seen: false,
+                    timestamp: new Date()
+                }));
+
+                const inserted = await Notification.insertMany(notifDocs, { ordered: false });
+                console.log(`[JobNotif] Inserted ${inserted.length}/${allStudents.length} notifications for "${jobRole}"`);
+
+                // 2. Push to each student's private socket room using receiverId from the saved doc
+                //    (do NOT use array index – ordered:false may skip failed inserts)
+                try {
+                    const io = getIO();
+                    inserted.forEach(notif => {
+                        const studentId = notif.receiverId?.toString();
+                        if (studentId) {
+                            io.to(`user:${studentId}`).emit('new_notification', {
+                                _id: notif._id,
+                                senderId: recruiterId,
+                                receiverId: studentId,
+                                senderRole: 'recruiter',
+                                receiverRole: 'student',
+                                message: notifMessage,
+                                type: 'job',
+                                seen: false,
+                                timestamp: notif.timestamp
+                            });
+                        }
+                    });
+                    console.log(`[Socket] Job notification pushed to ${inserted.length} student rooms`);
+                } catch (socketErr) {
+                    console.warn('[Socket] Could not push job notification:', socketErr.message);
+                }
+            } catch (notifErr) {
+                console.warn('[Notification] Job notification error:', notifErr.message);
+            }
+        });
+
         res.status(201).json(newJob);
     } catch (error) {
         console.error('Error creating job:', error);

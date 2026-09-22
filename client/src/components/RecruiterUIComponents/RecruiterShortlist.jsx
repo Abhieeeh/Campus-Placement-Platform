@@ -3,9 +3,9 @@ import {
     UserCheck, Search, Filter, Calendar, Gift,
     XCircle, Eye, Briefcase, GraduationCap, Award
 } from 'lucide-react';
-import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterShortlist.css';
+import { authFetch } from '../../utils/api';
 
 export default function RecruiterShortlist({ user, onScheduleInterview }) {
     const [shortlistedApps, setShortlistedApps] = useState([]);
@@ -19,14 +19,27 @@ export default function RecruiterShortlist({ user, onScheduleInterview }) {
 
     const loadData = async () => {
         try {
-            const [apps, jList] = await Promise.all([
-                recruiterService.getApplications({ recruiterEmail: user?.email }),
-                recruiterService.getJobs({ recruiterEmail: user?.email })
+            if (!user?.email) return;
+            const [appsRes, jobsRes] = await Promise.all([
+                authFetch('http://localhost:5000/api/applications/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                }),
+                authFetch('http://localhost:5000/api/jobs/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                })
             ]);
-            // Shortlist pool = Shortlisted + Interview only (not Offered — they've moved on)
-            const shortlistPool = apps.filter(a => ['Shortlisted', 'Interview'].includes(a.status));
+
+            const apps = appsRes.ok ? await appsRes.json() : [];
+            const jList = jobsRes.ok ? await jobsRes.json() : [];
+
+            // Shortlist pool = Shortlisted + Interview only
+            const shortlistPool = (apps || []).filter(a => ['Shortlisted', 'Interview'].includes(a.status));
             setShortlistedApps(shortlistPool);
-            setJobs(jList);
+            setJobs(jList || []);
         } catch (e) {
             console.error('Failed to load shortlist:', e);
         }
@@ -41,20 +54,55 @@ export default function RecruiterShortlist({ user, onScheduleInterview }) {
             window.removeEventListener('recruiter_applications_updated', loadData);
             window.removeEventListener('recruiter_interviews_updated', loadData);
         };
-    }, []);
+    }, [user?.email]);
+
+    const getCandidateProfile = async (email, app) => {
+        try {
+            const res = await authFetch('http://localhost:5000/api/auth/student-profile/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.profile) return data.profile;
+            }
+        } catch (e) {
+            console.error('Error fetching candidate profile:', e);
+        }
+        return {
+            name: app.candidateName || 'Candidate',
+            email: app.studentEmail || app.candidateEmail || email,
+            branch: app.candidateBranch || 'CSE',
+            cgpa: app.candidateCgpa || '0',
+            skills: app.candidateSkills || [],
+            resume: { name: app.candidateResume || 'Resume.pdf' }
+        };
+    };
 
     const handleViewCandidate = async (app) => {
         const email = app.studentEmail || app.candidateEmail;
-        const cand = await recruiterService.getCandidateProfile(email, app);
+        const cand = await getCandidateProfile(email, app);
         setSelectedCandidate(cand);
         setSelectedApplication(app);
     };
 
     const handleStatusChange = async (appId, newStatus) => {
         const targetId = appId?._id || appId?.id || appId;
-        await recruiterService.updateApplicationStatus(targetId, newStatus);
-        setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
-        loadData();
+        try {
+            const res = await authFetch(`http://localhost:5000/api/applications/${targetId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            if (res.ok) {
+                setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
+                loadData();
+                window.dispatchEvent(new Event('recruiter_applications_updated'));
+            }
+        } catch (err) {
+            console.error('Failed to update status:', err);
+        }
     };
 
     const filtered = shortlistedApps.filter(app => {
@@ -122,7 +170,7 @@ export default function RecruiterShortlist({ user, onScheduleInterview }) {
                     >
                     <option value="All">All Drives ({shortlistedApps.length})</option>
                         {jobs.map(j => (
-                            <option key={j.id} value={j.id}>{j.role || j.title}</option>
+                            <option key={j._id || j.id} value={j._id || j.id}>{j.role || j.title}</option>
                         ))}
                     </select>
                 </div>
@@ -161,7 +209,7 @@ export default function RecruiterShortlist({ user, onScheduleInterview }) {
                                     </thead>
                                     <tbody>
                                         {candidates.map(app => (
-                                            <tr key={app.id}>
+                                            <tr key={app._id || app.id}>
                                                 <td>
                                                     <div className="rd-candidate-cell">
                                                         <div className="rd-candidate-avatar">
@@ -176,7 +224,7 @@ export default function RecruiterShortlist({ user, onScheduleInterview }) {
                                                 </td>
                                                 <td>{app.appliedDate}</td>
                                                 <td>
-                                                    <span className={`rec-badge ${app.status.toLowerCase()}`}>
+                                                    <span className={`rec-badge ${(app.status || 'new').toLowerCase()}`}>
                                                         {app.status}
                                                     </span>
                                                 </td>
@@ -195,7 +243,7 @@ export default function RecruiterShortlist({ user, onScheduleInterview }) {
                                                                 style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
                                                                 onClick={async () => {
                                                                     const email = app.studentEmail || app.candidateEmail;
-                                                                    const cand = await recruiterService.getCandidateProfile(email, app);
+                                                                    const cand = await getCandidateProfile(email, app);
                                                                     if (onScheduleInterview) onScheduleInterview(cand, app);
                                                                 }}
                                                             >

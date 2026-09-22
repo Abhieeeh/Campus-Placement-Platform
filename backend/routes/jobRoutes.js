@@ -12,6 +12,7 @@ const router = express.Router();
 
 router.get('/', getJobs);
 router.get('/by-recruiter/:email', getJobsByRecruiter);
+router.post('/by-recruiter', getJobsByRecruiter);
 router.get('/:id', getJobById);
 router.post('/', createJob);
 router.put('/:id', updateJob);

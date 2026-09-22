@@ -3,7 +3,6 @@ import {
     Settings, Bell, Cpu, Video, Shield,
     Check, Save, RefreshCw
 } from 'lucide-react';
-import { recruiterService } from '../../services/recruiterService';
 import './RecruiterSettings.css';
 
 const DEFAULT_SETTINGS = {
@@ -22,17 +21,17 @@ export default function RecruiterSettings() {
     const [saveFeedback, setSaveFeedback] = useState(false);
 
     useEffect(() => {
-        const fetchSettings = async () => {
-            try {
-                const loaded = await recruiterService.getSettings();
-                if (loaded && typeof loaded === 'object') {
-                    setSettings({ ...DEFAULT_SETTINGS, ...loaded });
+        try {
+            const saved = localStorage.getItem('recruiter_settings');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && typeof parsed === 'object') {
+                    setSettings({ ...DEFAULT_SETTINGS, ...parsed });
                 }
-            } catch (err) {
-                console.error('Failed to load settings:', err);
             }
-        };
-        fetchSettings();
+        } catch (err) {
+            console.error('Failed to load settings:', err);
+        }
     }, []);
 
     const handleToggle = (key) => {
@@ -46,7 +45,7 @@ export default function RecruiterSettings() {
     const handleSave = async (e) => {
         e.preventDefault();
         try {
-            await recruiterService.updateSettings(settings);
+            localStorage.setItem('recruiter_settings', JSON.stringify(settings));
             setSaveFeedback(true);
             setTimeout(() => setSaveFeedback(false), 3000);
         } catch (err) {

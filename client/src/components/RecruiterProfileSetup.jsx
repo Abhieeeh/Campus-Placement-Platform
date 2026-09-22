@@ -4,7 +4,7 @@ import {
     CheckCircle2, AlertTriangle, ArrowRight, Plus, X,
     Briefcase, ShieldCheck, MapPin, Users
 } from 'lucide-react';
-import { recruiterService } from '../services/recruiterService';
+import { authFetch } from '../utils/api';
 import './RecruiterProfileSetup.css';
 
 const DEFAULT_BRANCH_OPTIONS = [
@@ -78,7 +78,7 @@ export default function RecruiterProfileSetup({ initialUser, onComplete }) {
         };
 
         try {
-            await fetch('http://localhost:5000/api/auth/recruiter-profile', {
+            await authFetch('http://localhost:5000/api/auth/recruiter-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

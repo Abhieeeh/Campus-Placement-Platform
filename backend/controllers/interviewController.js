@@ -1,5 +1,7 @@
 import Interview from "../models/interview.js";
 import Application from "../models/application.js";
+import user from "../models/user.js";
+import { createAndEmitNotification } from "./notificationController.js";
 
 // Get interviews by query parameters (fallback)
 export const getInterviews = async (req, res) => {
@@ -26,10 +28,13 @@ export const getInterviews = async (req, res) => {
     }
 };
 
-// Get interviews for a recruiter by route parameter
+// Get interviews for a recruiter (accepts email in body, query, or params)
 export const getInterviewsByRecruiter = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Recruiter email is required' });
+        }
         const interviews = await Interview.find({ recruiterEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(interviews);
     } catch (error) {
@@ -38,10 +43,13 @@ export const getInterviewsByRecruiter = async (req, res) => {
     }
 };
 
-// Get interviews for a student by route parameter
+// Get interviews for a student (accepts email in body, query, or params)
 export const getInterviewsByStudent = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Student email is required' });
+        }
         const interviews = await Interview.find({ studentEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(interviews);
     } catch (error) {
@@ -113,6 +121,30 @@ export const scheduleInterview = async (req, res) => {
             } catch (err) {
                 // non-blocking
             }
+        }
+
+        // Notify the student that they have been selected for an interview
+        try {
+            const targetEmail = studentEmail || candidateEmail;
+            if (targetEmail) {
+                const studentUserDoc = await user.findOne({ email: targetEmail });
+                const recruiterEmail = req.body.recruiterEmail || (appDoc && appDoc.recruiterEmail);
+                const recruiterUserDoc = recruiterEmail ? await user.findOne({ email: recruiterEmail }) : null;
+                if (studentUserDoc) {
+                    const interviewDate = req.body.date || 'a scheduled date';
+                    const interviewTime = req.body.time || '';
+                    await createAndEmitNotification({
+                        senderId: recruiterUserDoc ? recruiterUserDoc._id.toString() : (req.user?.userId || null),
+                        receiverId: studentUserDoc._id.toString(),
+                        senderRole: 'recruiter',
+                        receiverRole: 'student',
+                        message: `You have been selected for an interview for "${jobTitle}" at ${company} on ${interviewDate}${interviewTime ? ' at ' + interviewTime : ''}. Check your Interviews tab for details.`,
+                        type: 'interview'
+                    });
+                }
+            }
+        } catch (notifErr) {
+            console.warn('[Notification] Could not send interview notification:', notifErr.message);
         }
 
         res.status(201).json(newInterview);

@@ -8,6 +8,7 @@ import RecruiterUI from './components/RecruiterUI';
 import StudentProfileSetup from './components/StudentProfileSetup';
 import RecruiterProfileSetup from './components/RecruiterProfileSetup';
 import { GraduationCap, Briefcase } from 'lucide-react';
+import { connectSocket, disconnectSocket } from './utils/socket';
 
 function nameFromEmail(email = '') {
   return email
@@ -40,6 +41,11 @@ export default function App() {
 
         window.dispatchEvent(new Event('student_profile_updated'));
         window.dispatchEvent(new Event('recruiter_profile_updated'));
+
+        // Connect socket after successful login
+        if (data.user?._id) {
+          connectSocket(data.user._id, data.user.role);
+        }
 
         setError(null);
         setUser(data.user);
@@ -79,14 +85,17 @@ export default function App() {
     }
   }
 
-  function handleProfileComplete({ role: completedRole, email }) {
-    setUser({ email, role: completedRole });
+  function handleProfileComplete({ role: completedRole, email, userId }) {
+    const newUser = { email, role: completedRole, _id: userId };
+    if (userId) connectSocket(userId, completedRole);
+    setUser(newUser);
     setPendingUser(null);
     setError(null);
     setAuthNotification('');
   }
 
   function handleLogout() {
+    disconnectSocket();
     localStorage.removeItem('authToken');
     window.dispatchEvent(new Event('student_profile_updated'));
     window.dispatchEvent(new Event('recruiter_profile_updated'));

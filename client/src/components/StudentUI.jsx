@@ -10,6 +10,8 @@ import Studentjobs from './StudentUIComponents/Studentjobs';
 import Studentapplication from './StudentUIComponents/Studentapplication';
 import Studentinterviews from './StudentUIComponents/Studentinterviews';
 import Studentnotifications from './StudentUIComponents/Studentnotifications';
+import { authFetch } from '../utils/api';
+import { getSocket } from '../utils/socket';
 
 const SIDEBAR_ITEMS = [
     { id: 'studentdashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,35 +39,48 @@ export default function StudentUI({ user, onLogout }) {
     const displayName = nameFromEmail(user.email);
     const initial = displayName[0] ?? 'S';
 
-    // Unread notifications count state
-    const [unreadNotifsCount, setUnreadNotifsCount] = useState(() => {
-        try {
-            const saved = localStorage.getItem('student_notifications');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                return Array.isArray(parsed) ? parsed.filter(n => n.unread).length : 3;
-            }
-        } catch (e) { /* ignore */ }
-        return 3;
-    });
+    // Unread notifications count state – default 0, filled from DB on mount
+    const [unreadNotifsCount, setUnreadNotifsCount] = useState(0);
 
+    // Fetch unread count from DB (called on mount AND whenever notifications change)
+    const fetchUnreadCount = async () => {
+        try {
+            const userId = user._id || user.id;
+            if (!userId) return;
+            const res = await authFetch(
+                `http://localhost:5000/api/notifications?userId=${userId}&unreadOnly=true`
+            );
+            if (res.ok) {
+                const data = await res.json();
+                setUnreadNotifsCount(Array.isArray(data) ? data.length : 0);
+            }
+        } catch (e) {
+            console.warn('[StudentUI] Could not fetch notification count:', e.message);
+        }
+    };
+
+    // Fetch on mount
     useEffect(() => {
-        const syncNotifs = () => {
-            try {
-                const saved = localStorage.getItem('student_notifications');
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed)) {
-                        setUnreadNotifsCount(parsed.filter(n => n.unread).length);
-                    }
-                }
-            } catch (e) { /* ignore */ }
+        fetchUnreadCount();
+    }, [user._id, user.id]);
+
+    // Re-fetch from DB when notifications are read / deleted (event from Studentnotifications)
+    useEffect(() => {
+        window.addEventListener('student_notifications_updated', fetchUnreadCount);
+        return () => window.removeEventListener('student_notifications_updated', fetchUnreadCount);
+    }, [user._id, user.id]);
+
+    // Real-time socket listener – increment badge instantly on new notification
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const handleNewNotification = () => {
+            setUnreadNotifsCount(prev => prev + 1);
         };
-        window.addEventListener('student_notifications_updated', syncNotifs);
-        window.addEventListener('storage', syncNotifs);
+        socket.on('new_notification', handleNewNotification);
         return () => {
-            window.removeEventListener('student_notifications_updated', syncNotifs);
-            window.removeEventListener('storage', syncNotifs);
+            socket.off('new_notification', handleNewNotification);
         };
     }, []);
 

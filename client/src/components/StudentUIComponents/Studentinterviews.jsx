@@ -4,8 +4,8 @@ import {
     CheckCircle, XCircle, AlertCircle, Eye, ExternalLink,
     Filter, X, User, Sparkles, Award, Star, ArrowRight, ShieldCheck
 } from 'lucide-react';
-import { placementService } from '../../services/placementService';
 import './Studentinterviews.css';
+import { authFetch } from '../../utils/api';
 
 export default function Studentinterviews({ user }) {
     const [interviews, setInterviews] = useState([]);
@@ -13,11 +13,18 @@ export default function Studentinterviews({ user }) {
 
     const loadInterviews = async () => {
         try {
-            const params = user?.email ? { studentEmail: user.email } : {};
-            const data = await placementService.getInterviews(params);
-            setInterviews(data);
+            if (!user?.email) return;
+            const res = await authFetch('http://localhost:5000/api/interviews/by-student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setInterviews(data);
+            }
         } catch (e) {
-            // handle error
+            console.error('Failed to load interviews:', e);
         } finally {
             setLoading(false);
         }
@@ -250,7 +257,6 @@ export default function Studentinterviews({ user }) {
                 )}
             </div>
 
-            {/* ── 4. Interview Details & Evaluation Modal ───────────────────── */}
             {/* ── 4. Interview Details & Evaluation Modal ───────────────────── */}
             {selectedInterview && (() => {
                 const upcoming = isUpcoming(selectedInterview.status);

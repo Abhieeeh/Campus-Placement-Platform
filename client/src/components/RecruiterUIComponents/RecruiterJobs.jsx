@@ -5,9 +5,9 @@ import {
     ChevronDown, ChevronUp, Eye, CheckCircle, X,
     GraduationCap, Clock, Award
 } from 'lucide-react';
-import { recruiterService } from '../../services/recruiterService';
 import RecruiterCandidateProfile from './RecruiterCandidateProfile';
 import './RecruiterJobs.css';
+import { authFetch } from '../../utils/api';
 
 export default function RecruiterJobs({ user, onScheduleInterview, openCreateModalOnMount, onPostJobModalHandled }) {
     const [jobs, setJobs] = useState([]);
@@ -47,12 +47,23 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
 
     const loadData = async () => {
         try {
-            const [jList, aList] = await Promise.all([
-                recruiterService.getJobs({ recruiterEmail: user?.email }),
-                recruiterService.getApplications({ recruiterEmail: user?.email })
+            if (!user?.email) return;
+            const [jobsRes, appsRes] = await Promise.all([
+                authFetch('http://localhost:5000/api/jobs/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                }),
+                authFetch('http://localhost:5000/api/applications/by-recruiter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                })
             ]);
-            setJobs(jList);
-            setApplications(aList);
+            const jList = jobsRes.ok ? await jobsRes.json() : [];
+            const aList = appsRes.ok ? await appsRes.json() : [];
+            setJobs(jList || []);
+            setApplications(aList || []);
         } catch (e) {
             console.error('Failed to load jobs data:', e);
         }
@@ -67,7 +78,7 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
             window.removeEventListener('recruiter_jobs_updated', loadData);
             window.removeEventListener('recruiter_applications_updated', loadData);
         };
-    }, []);
+    }, [user?.email]);
 
     useEffect(() => {
         if (openCreateModalOnMount) {
@@ -78,9 +89,19 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
 
     const handleOpenCreate = async () => {
         let companyProfile = {};
-        try {
-            companyProfile = await recruiterService.getCompanyProfile(user?.email);
-        } catch (e) { /* fallback */ }
+        if (user?.email) {
+            try {
+                const res = await authFetch('http://localhost:5000/api/auth/recruiter-profile/get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.profile) companyProfile = data.profile;
+                }
+            } catch (e) { /* fallback */ }
+        }
 
         setEditingJob(null);
         setFormData({
@@ -168,43 +189,88 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
             }
         };
 
-        if (editingJob) {
-            await recruiterService.updateJob(editingJob.id || editingJob._id, payload);
-        } else {
-            await recruiterService.createJob(payload);
+        try {
+            if (editingJob) {
+                const targetId = editingJob._id || editingJob.id;
+                await authFetch(`http://localhost:5000/api/jobs/${targetId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                await authFetch('http://localhost:5000/api/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
+            setShowModal(false);
+            loadData();
+            window.dispatchEvent(new Event('recruiter_jobs_updated'));
+        } catch (err) {
+            console.error('Error submitting job form:', err);
         }
-
-        setShowModal(false);
-        loadData();
     };
 
     const handleDeleteJob = async (jobId) => {
         if (window.confirm('Are you sure you want to delete this job posting?')) {
-            await recruiterService.deleteJob(jobId);
-            loadData();
+            try {
+                await authFetch(`http://localhost:5000/api/jobs/${jobId}`, { method: 'DELETE' });
+                loadData();
+                window.dispatchEvent(new Event('recruiter_jobs_updated'));
+            } catch (err) {
+                console.error('Error deleting job:', err);
+            }
         }
     };
 
-    const handleViewCandidate = (app) => {
-        const cand = recruiterService.getCandidateById(app.candidateId) || {
-            id: app.candidateId,
-            name: app.candidateName,
-            email: `${app.candidateName.toLowerCase().replace(/\s+/g, '.')}@campus.edu`,
-            branch: app.candidateBranch,
-            cgpa: app.candidateCgpa,
+    const getCandidateProfile = async (email, app) => {
+        try {
+            const res = await authFetch('http://localhost:5000/api/auth/student-profile/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.profile) return data.profile;
+            }
+        } catch (e) {
+            console.error('Error fetching candidate profile:', e);
+        }
+        return {
+            name: app.candidateName || 'Candidate',
+            email: app.studentEmail || app.candidateEmail || email,
+            branch: app.candidateBranch || 'CSE',
+            cgpa: app.candidateCgpa || '0',
             skills: app.candidateSkills || ['General Aptitude'],
-            resumeName: app.candidateResume || `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`,
-            projects: [],
-            experience: []
+            resume: { name: app.candidateResume || `${app.candidateName?.replace(/\s+/g, '_')}_Resume.pdf` }
         };
+    };
+
+    const handleViewCandidate = async (app) => {
+        const email = app.studentEmail || app.candidateEmail;
+        const cand = await getCandidateProfile(email, app);
         setSelectedCandidate(cand);
         setSelectedApplication(app);
     };
 
     const handleStatusChange = async (appId, newStatus) => {
-        await recruiterService.updateApplicationStatus(appId, newStatus);
-        setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
-        loadData();
+        const targetId = appId?._id || appId?.id || appId;
+        try {
+            const res = await authFetch(`http://localhost:5000/api/applications/${targetId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            if (res.ok) {
+                setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
+                loadData();
+                window.dispatchEvent(new Event('recruiter_applications_updated'));
+            }
+        } catch (err) {
+            console.error('Failed to update status:', err);
+        }
     };
 
     // Filtered jobs
@@ -274,12 +340,13 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
                     </div>
                 ) : (
                     filteredJobs.map(job => {
-                        const jobApplicants = applications.filter(a => a.jobId === job.id);
-                        const isExpanded = expandedJobId === job.id;
+                        const jobId = job._id || job.id;
+                        const jobApplicants = applications.filter(a => a.jobId === jobId);
+                        const isExpanded = expandedJobId === jobId;
                         const jobStatus = job.status || 'Active';
 
                         return (
-                            <div key={job.id} className="rj-job-card">
+                            <div key={jobId} className="rj-job-card">
                                 <div className="rj-card-main">
                                     <div className="rj-card-header">
                                         <div className="rj-header-left">
@@ -342,7 +409,7 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
                                 <div className="rj-card-footer">
                                     <div
                                         className="rj-applicants-count-badge"
-                                        onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
+                                        onClick={() => setExpandedJobId(isExpanded ? null : jobId)}
                                     >
                                         <Users size={16} />
                                         <span>
@@ -360,7 +427,7 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
                                         </button>
                                         <button
                                             className="rj-action-btn delete"
-                                            onClick={() => handleDeleteJob(job.id)}
+                                            onClick={() => handleDeleteJob(jobId)}
                                         >
                                             <Trash2 size={14} /> Delete
                                         </button>
@@ -382,7 +449,7 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
                                         ) : (
                                             <div className="rj-applicants-mini-grid">
                                                 {jobApplicants.map(app => (
-                                                    <div key={app.id} className="rj-applicant-mini-card">
+                                                    <div key={app._id || app.id} className="rj-applicant-mini-card">
                                                         <div>
                                                             <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>
                                                                 {app.candidateName}
@@ -390,7 +457,7 @@ export default function RecruiterJobs({ user, onScheduleInterview, openCreateMod
                                                             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
                                                                 {app.candidateBranch} • CGPA: {app.candidateCgpa}
                                                             </div>
-                                                            <span className={`rec-badge ${app.status.toLowerCase()}`} style={{ marginTop: '0.35rem', fontSize: '0.7rem' }}>
+                                                            <span className={`rec-badge ${(app.status || 'new').toLowerCase()}`} style={{ marginTop: '0.35rem', fontSize: '0.7rem' }}>
                                                                 {app.status}
                                                             </span>
                                                         </div>

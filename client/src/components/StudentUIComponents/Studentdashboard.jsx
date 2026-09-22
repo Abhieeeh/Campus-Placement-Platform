@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Briefcase, CheckCircle, Clock, ChevronRight, Building, MapPin, DollarSign, ArrowRight, Check } from 'lucide-react';
-import { placementService } from '../../services/placementService';
 import './Studentdashboard.css';
+import { authFetch } from '../../utils/api';
 
 export default function Studentdashboard({ user, onNavigate }) {
     const [dashboardData, setDashboardData] = useState({
@@ -13,11 +13,18 @@ export default function Studentdashboard({ user, onNavigate }) {
 
     const loadData = async () => {
         try {
-            const params = user?.email ? { studentEmail: user.email } : {};
-            const data = await placementService.getDashboardData(params);
-            setDashboardData(data);
+            if (!user?.email) return;
+            const res = await authFetch('http://localhost:5000/api/dashboard/stats/student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDashboardData(data);
+            }
         } catch (e) {
-            // handle error
+            console.error('Error fetching student dashboard stats:', e);
         } finally {
             setLoading(false);
         }
@@ -85,15 +92,15 @@ export default function Studentdashboard({ user, onNavigate }) {
                             <p style={{ color: '#64748b', fontSize: '0.9rem', padding: '1rem' }}>No active job drives available.</p>
                         ) : (
                             dashboardData.recommendedJobs.map(job => (
-                                <div key={job.id} className="job-card">
+                                <div key={job._id || job.id} className="job-card">
                                     <div className="job-header">
                                         <div>
-                                            <h3 className="job-title">{job.role}</h3>
+                                            <h3 className="job-title">{job.role || job.title}</h3>
                                             <p className="job-company">
                                                 <Building size={14} /> {job.company}
                                             </p>
                                         </div>
-                                        {appliedJobIds.has(job.id) ? (
+                                        {appliedJobIds.has(job._id || job.id) ? (
                                             <button className="apply-btn" style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }} disabled>
                                                 <Check size={13} /> Applied
                                             </button>
@@ -131,13 +138,13 @@ export default function Studentdashboard({ user, onNavigate }) {
                             <p style={{ color: '#64748b', fontSize: '0.9rem', padding: '1rem' }}>You have not submitted any applications yet.</p>
                         ) : (
                             dashboardData.recentApplications.map(app => (
-                                <div key={app.id} className="application-item">
+                                <div key={app._id || app.id} className="application-item">
                                     <div className="app-info">
-                                        <h4>{app.role}</h4>
+                                        <h4>{app.role || app.jobTitle}</h4>
                                         <p>{app.company}</p>
                                     </div>
                                     <div className="app-status">
-                                        <span className={`status-badge ${app.status.toLowerCase()}`}>
+                                        <span className={`status-badge ${(app.status || 'applied').toLowerCase()}`}>
                                             {app.status}
                                         </span>
                                         <span className="app-date">{app.appliedDate}</span>

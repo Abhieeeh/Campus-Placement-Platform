@@ -11,7 +11,9 @@ const router = express.Router();
 
 router.get('/', getShortlists);
 router.get('/by-student/:email', getShortlistsByStudent);
+router.post('/by-student', getShortlistsByStudent);
 router.get('/by-recruiter/:email', getShortlistsByRecruiter);
+router.post('/by-recruiter', getShortlistsByRecruiter);
 router.post('/', addToShortlist);
 router.delete('/:id', removeFromShortlist);
 

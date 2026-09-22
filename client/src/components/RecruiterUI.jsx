@@ -14,7 +14,8 @@ import RecruiterInterviews from './RecruiterUIComponents/RecruiterInterviews';
 import RecruiterNotifications from './RecruiterUIComponents/RecruiterNotifications';
 import RecruiterCompanyProfile from './RecruiterUIComponents/RecruiterCompanyProfile';
 import RecruiterSettings from './RecruiterUIComponents/RecruiterSettings';
-import { recruiterService } from '../services/recruiterService';
+import { authFetch } from '../utils/api';
+import { getSocket } from '../utils/socket';
 
 const SIDEBAR_ITEMS = [
     { id: 'recruiterdashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -52,17 +53,39 @@ export default function RecruiterUI({ user, onLogout }) {
     const displayName = user?.name || nameFromEmail(user?.email);
     const initial = displayName[0] ?? 'R';
 
-    const syncNotifsCount = async () => {
+    // Fetch unread count from DB (reused on mount + after mark-read / delete)
+    const fetchUnreadCount = async () => {
         try {
-            const notifs = await recruiterService.getNotifications();
-            setUnreadNotifsCount(notifs.filter(n => n.unread).length);
+            const userId = user?._id || user?.id;
+            if (!userId) return;
+            const res = await authFetch(
+                `http://localhost:5000/api/notifications?userId=${userId}&unreadOnly=true`
+            );
+            if (res.ok) {
+                const data = await res.json();
+                setUnreadNotifsCount(Array.isArray(data) ? data.length : 0);
+            }
         } catch (e) { /* ignore */ }
     };
 
+    // Fetch on mount
     useEffect(() => {
-        syncNotifsCount();
-        window.addEventListener('recruiter_notifications_updated', syncNotifsCount);
-        return () => window.removeEventListener('recruiter_notifications_updated', syncNotifsCount);
+        fetchUnreadCount();
+    }, [user?._id, user?.id]);
+
+    // Re-fetch when RecruiterNotifications marks notifications as read / deleted
+    useEffect(() => {
+        window.addEventListener('recruiter_notifications_updated', fetchUnreadCount);
+        return () => window.removeEventListener('recruiter_notifications_updated', fetchUnreadCount);
+    }, [user?._id, user?.id]);
+
+    // Real-time socket listener – increment badge instantly when student applies
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+        const handleNew = () => setUnreadNotifsCount(prev => prev + 1);
+        socket.on('new_notification', handleNew);
+        return () => socket.off('new_notification', handleNew);
     }, []);
 
     /* Close user dropdown on outside click */

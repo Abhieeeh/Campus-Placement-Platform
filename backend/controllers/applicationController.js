@@ -1,6 +1,8 @@
 import Application from "../models/application.js";
 import Job from "../models/job.js";
 import Shortlist from "../models/shortlist.js";
+import user from "../models/user.js";
+import { createAndEmitNotification } from "./notificationController.js";
 
 // Get applications by query parameters (fallback)
 export const getApplications = async (req, res) => {
@@ -36,10 +38,13 @@ export const getApplications = async (req, res) => {
     }
 };
 
-// Get applications for a specific recruiter by route parameter
+// Get applications for a specific recruiter (accepts email in body, query, or params)
 export const getApplicationsByRecruiter = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Recruiter email is required' });
+        }
         const apps = await Application.find({ recruiterEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(apps);
     } catch (error) {
@@ -48,10 +53,13 @@ export const getApplicationsByRecruiter = async (req, res) => {
     }
 };
 
-// Get applications for a specific student by route parameter
+// Get applications for a specific student (accepts email in body, query, or params)
 export const getApplicationsByStudent = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: 'Student email is required' });
+        }
         const apps = await Application.find({ studentEmail: email }).sort({ createdAt: -1 });
         res.status(200).json(apps);
     } catch (error) {
@@ -87,7 +95,7 @@ export const getApplicationById = async (req, res) => {
     }
 };
 
-// Apply to a job (Blocks closed jobs, uses DB job data, simplifies logic)
+// Apply to a job (Blocks closed jobs, uses DB job data, candidateId is student's user ObjectId)
 export const applyToJob = async (req, res) => {
     try {
         const { jobId, studentProfile, newResume } = req.body;
@@ -116,7 +124,11 @@ export const applyToJob = async (req, res) => {
             return res.status(400).json({ message: 'This job posting is currently not active.' });
         }
 
-        // 2. Extract candidate information
+        // 2. Fetch student user ObjectId from decoded token or users collection
+        const studentUserDoc = !req.user?.userId ? await user.findOne({ email: studentEmail }) : null;
+        const candidateUserId = req.user?.userId || (studentUserDoc ? studentUserDoc._id.toString() : (studentProfile?.userId || studentProfile?._id));
+
+        // 3. Extract candidate information
         const candidateName = studentProfile?.name || 
             studentProfile?.personalInfo?.name || 
             studentEmail.split('@')[0];
@@ -132,7 +144,7 @@ export const applyToJob = async (req, res) => {
         const candidateResume = newResume?.name || studentProfile?.resume?.name || 'Resume.pdf';
         const candidatePhone = studentProfile?.phone || studentProfile?.personalInfo?.phone || '';
 
-        // 3. Construct application document
+        // 4. Construct application document
         const appData = {
             jobId: actualJobId,
             recruiterEmail: jobDoc.recruiterEmail || 'recruiter@company.com',
@@ -147,7 +159,7 @@ export const applyToJob = async (req, res) => {
             appliedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
             appliedTimestamp: Date.now(),
             status: 'New',
-            candidateId: studentProfile?.id || studentProfile?._id || studentEmail,
+            candidateId: candidateUserId,
             candidateName,
             candidateEmail: studentEmail,
             candidateBranch,
@@ -159,12 +171,29 @@ export const applyToJob = async (req, res) => {
             stage: 1
         };
 
-        // 4. Save or update application
+        // 5. Save or update application
         const application = await Application.findOneAndUpdate(
             { jobId: actualJobId, studentEmail },
             appData,
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
+
+        // 6. Notify the recruiter that a new application arrived
+        try {
+            const recruiterUserDoc = await user.findOne({ email: jobDoc.recruiterEmail });
+            if (recruiterUserDoc) {
+                await createAndEmitNotification({
+                    senderId: candidateUserId,
+                    receiverId: recruiterUserDoc._id.toString(),
+                    senderRole: 'student',
+                    receiverRole: 'recruiter',
+                    message: `${candidateName} has applied for "${jobDoc.role || jobDoc.title}" at ${jobDoc.company}.`,
+                    type: 'application'
+                });
+            }
+        } catch (notifErr) {
+            console.warn('[Notification] Could not send application notification:', notifErr.message);
+        }
 
         res.status(201).json(application);
     } catch (error) {
@@ -240,6 +269,36 @@ export const updateApplication = async (req, res) => {
                         { jobId: updated.jobId, studentEmail: updated.studentEmail }
                     ]
                 });
+            }
+
+            // Notify the student when their application status changes
+            const notifyStatuses = ['shortlisted', 'interview', 'offered', 'rejected'];
+            if (notifyStatuses.includes(statusLower)) {
+                try {
+                    const studentUserDoc = await user.findOne({ email: updated.studentEmail });
+                    const recruiterUserDoc = updated.recruiterEmail
+                        ? await user.findOne({ email: updated.recruiterEmail })
+                        : null;
+
+                    if (studentUserDoc) {
+                        const statusMessages = {
+                            shortlisted: `Congratulations! You have been shortlisted for "${updated.jobTitle || updated.role}" at ${updated.company}.`,
+                            interview: `You have been selected for an interview for "${updated.jobTitle || updated.role}" at ${updated.company}. Check your interviews tab for details.`,
+                            offered: `🎉 You have received a job offer for "${updated.jobTitle || updated.role}" at ${updated.company}!`,
+                            rejected: `Your application for "${updated.jobTitle || updated.role}" at ${updated.company} was not selected this time.`
+                        };
+                        await createAndEmitNotification({
+                            senderId: recruiterUserDoc ? recruiterUserDoc._id.toString() : null,
+                            receiverId: studentUserDoc._id.toString(),
+                            senderRole: 'recruiter',
+                            receiverRole: 'student',
+                            message: statusMessages[statusLower],
+                            type: statusLower === 'interview' ? 'interview' : statusLower === 'offered' ? 'offer' : 'shortlist'
+                        });
+                    }
+                } catch (notifErr) {
+                    console.warn('[Notification] Could not send status-change notification:', notifErr.message);
+                }
             }
         }
 

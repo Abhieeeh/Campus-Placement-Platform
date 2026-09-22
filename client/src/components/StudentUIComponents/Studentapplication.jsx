@@ -5,21 +5,28 @@ import {
     FileText, ArrowRight, Video, AlertCircle, ChevronRight,
     Star, Send, ExternalLink, Trash2, Check
 } from 'lucide-react';
-import { placementService } from '../../services/placementService';
 import './Studentapplication.css';
+import { authFetch } from '../../utils/api';
 
 export default function Studentapplication({ user }) {
-    // Load applications dynamically via placementService
+    // Load applications dynamically via direct fetch calls
     const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const loadApplications = async () => {
         try {
-            const params = user?.email ? { studentEmail: user.email } : {};
-            const data = await placementService.getApplications(params);
-            setApplications(data);
+            if (!user?.email) return;
+            const res = await authFetch('http://localhost:5000/api/applications/by-student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setApplications(data);
+            }
         } catch (e) {
-            // fallback
+            console.error('Failed to load applications:', e);
         } finally {
             setLoading(false);
         }
@@ -61,11 +68,17 @@ export default function Studentapplication({ user }) {
         const nextSaved = !app.isSaved;
         const targetId = app._id || app.id;
         try {
-            await placementService.updateApplication(targetId, {
-                isSaved: nextSaved,
-                status: app.status === 'Saved' && !nextSaved ? 'Applied' : app.status
+            const res = await authFetch(`http://localhost:5000/api/applications/${targetId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    isSaved: nextSaved,
+                    status: app.status === 'Saved' && !nextSaved ? 'Applied' : app.status
+                })
             });
-            loadApplications();
+            if (res.ok) {
+                loadApplications();
+            }
         } catch (err) {
             console.error('Failed to update bookmark:', err);
         }
@@ -77,11 +90,15 @@ export default function Studentapplication({ user }) {
             const app = applications.find(a => (a.id === appId || a._id === appId));
             const targetId = app?._id || app?.id || appId;
             try {
-                await placementService.withdrawApplication(targetId);
-                if (selectedApp && (selectedApp.id === appId || selectedApp._id === appId)) {
-                    setSelectedApp(null);
+                const res = await authFetch(`http://localhost:5000/api/applications/${targetId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    if (selectedApp && (selectedApp.id === appId || selectedApp._id === appId)) {
+                        setSelectedApp(null);
+                    }
+                    loadApplications();
                 }
-                loadApplications();
             } catch (err) {
                 console.error('Failed to withdraw application:', err);
             }
@@ -276,16 +293,16 @@ export default function Studentapplication({ user }) {
                     </div>
                 ) : (
                     filteredApplications.map(app => (
-                        <div key={app.id} className="app-card">
+                        <div key={app._id || app.id} className="app-card">
                             <div>
                                 {/* Top: Company & Status Badge */}
                                 <div className="app-card-top">
                                     <div className="app-brand">
                                         <div className="app-logo" style={{ background: app.color || 'linear-gradient(135deg, #2563eb, #7c3aed)' }}>
-                                            {app.company.charAt(0)}
+                                            {(app.company || 'C').charAt(0)}
                                         </div>
                                         <div className="app-title-meta">
-                                            <h3>{app.role}</h3>
+                                            <h3>{app.role || app.jobTitle}</h3>
                                             <span>
                                                 <Building size={13} /> {app.company}
                                             </span>
@@ -293,7 +310,7 @@ export default function Studentapplication({ user }) {
                                     </div>
 
                                     {/* Status Badge */}
-                                    <span className={`status-pill ${app.status.toLowerCase()}`}>
+                                    <span className={`status-pill ${(app.status || 'applied').toLowerCase()}`}>
                                         {app.status === 'Offered' && <Star size={12} />}
                                         {app.status}
                                     </span>
@@ -316,12 +333,12 @@ export default function Studentapplication({ user }) {
                                 <div className="app-attached-resume">
                                     <div className="app-resume-left">
                                         <FileText size={15} color="#ef4444" />
-                                        <span>{app.resumeName || 'Resume.pdf'}</span>
+                                        <span>{app.candidateResume || app.resumeName || 'Resume.pdf'}</span>
                                     </div>
                                     <button
                                         type="button"
                                         style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
-                                        onClick={() => alert(`Viewing attached resume: ${app.resumeName || 'Resume.pdf'}`)}
+                                        onClick={() => alert(`Viewing attached resume: ${app.candidateResume || app.resumeName || 'Resume.pdf'}`)}
                                     >
                                         <Eye size={12} /> View
                                     </button>
@@ -339,7 +356,7 @@ export default function Studentapplication({ user }) {
                                 <button
                                     className={`btn-save-toggle ${app.isSaved || app.status === 'Saved' ? 'saved' : ''}`}
                                     title={app.isSaved ? 'Remove from Saved' : 'Save Application'}
-                                    onClick={(e) => handleToggleSave(app.id, e)}
+                                    onClick={(e) => handleToggleSave(app._id || app.id, e)}
                                 >
                                     <Bookmark size={16} fill={app.isSaved || app.status === 'Saved' ? '#7c3aed' : 'none'} />
                                 </button>
@@ -364,13 +381,13 @@ export default function Studentapplication({ user }) {
                             {/* App Hero */}
                             <div className="modal-company-hero">
                                 <div className="app-logo" style={{ background: selectedApp.color, width: 52, height: 52 }}>
-                                    {selectedApp.company.charAt(0)}
+                                    {(selectedApp.company || 'C').charAt(0)}
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <h3>{selectedApp.role}</h3>
+                                    <h3>{selectedApp.role || selectedApp.jobTitle}</h3>
                                     <p>{selectedApp.company} • {selectedApp.location} • {selectedApp.salary}</p>
                                 </div>
-                                <span className={`status-pill ${selectedApp.status.toLowerCase()}`}>
+                                <span className={`status-pill ${(selectedApp.status || 'applied').toLowerCase()}`}>
                                     {selectedApp.status}
                                 </span>
                             </div>
@@ -446,7 +463,7 @@ export default function Studentapplication({ user }) {
                             <div className="modal-info-grid">
                                 <div className="modal-info-card">
                                     <span>Application ID</span>
-                                    <strong>{selectedApp.id}</strong>
+                                    <strong>{selectedApp._id || selectedApp.id}</strong>
                                 </div>
                                 <div className="modal-info-card">
                                     <span>Applied Date</span>
@@ -467,7 +484,7 @@ export default function Studentapplication({ user }) {
                                             <FileText size={20} />
                                         </div>
                                         <div>
-                                            <h5>{selectedApp.resumeName || 'Resume.pdf'}</h5>
+                                            <h5>{selectedApp.candidateResume || selectedApp.resumeName || 'Resume.pdf'}</h5>
                                             <p>Submitted with this application</p>
                                         </div>
                                     </div>
@@ -475,7 +492,7 @@ export default function Studentapplication({ user }) {
                                         type="button"
                                         className="btn-secondary"
                                         style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                                        onClick={() => alert(`Opening resume: ${selectedApp.resumeName || 'Resume.pdf'}`)}
+                                        onClick={() => alert(`Opening resume: ${selectedApp.candidateResume || selectedApp.resumeName || 'Resume.pdf'}`)}
                                     >
                                         <Eye size={13} /> View Resume
                                     </button>
@@ -487,7 +504,7 @@ export default function Studentapplication({ user }) {
                             <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                                onClick={() => handleWithdrawApplication(selectedApp.id)}
+                                onClick={() => handleWithdrawApplication(selectedApp._id || selectedApp.id)}
                             >
                                 <Trash2 size={15} /> Withdraw Application
                             </button>

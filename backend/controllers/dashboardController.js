@@ -70,10 +70,10 @@ export const getDashboardStats = async (req, res) => {
     }
 };
 
-// Route-param: /stats/recruiter/:email
+// Route-param & body handler: /stats/recruiter
 export const getDashboardStatsByRecruiter = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
         return await fetchRecruiterStats(email, res);
     } catch (error) {
         console.error('Error fetching recruiter dashboard stats:', error);
@@ -81,10 +81,10 @@ export const getDashboardStatsByRecruiter = async (req, res) => {
     }
 };
 
-// Route-param: /stats/student/:email
+// Route-param & body handler: /stats/student
 export const getDashboardStatsByStudent = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
         return await fetchStudentStats(email, res);
     } catch (error) {
         console.error('Error fetching student dashboard stats:', error);

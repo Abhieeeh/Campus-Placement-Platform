@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 function generateToken(userId, role) {
     return jwt.sign(
         { userId, role },
-        process.env.JWT_SECRET,
+        process.env.JWT_SECRET || 'secret_key',
         { expiresIn: '7d' }
     );
 }
@@ -14,8 +14,20 @@ function generateToken(userId, role) {
 export const loginUser = async (req, res) => {
     try {
         const { email, role, password } = req.body;
+        const cleanEmail = (email || '').trim();
 
-        const foundUser = await user.findOne({ email });
+        if (!cleanEmail || !password) {
+            return res.status(400).json({ message: "Email and password are required" });
+        }
+
+        const foundUser = await user.findOne({
+            $or: [
+                { email: cleanEmail },
+                { email: cleanEmail.toLowerCase() },
+                { email: { $regex: new RegExp(`^${cleanEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i') } }
+            ]
+        });
+
         if (!foundUser) {
             return res.status(401).json({ message: "Invalid email or password" });
         }
@@ -24,24 +36,34 @@ export const loginUser = async (req, res) => {
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        if (foundUser.role !== role) {
+        if (role && foundUser.role.toLowerCase() !== role.toLowerCase()) {
             return res.status(401).json({ message: `This account is registered as a ${foundUser.role}, not a ${role}` });
         }
 
         const token = generateToken(foundUser._id, foundUser.role);
 
         let profile = null;
-        if (role === 'student') {
-            profile = await StudentProfile.findOne({ email: foundUser.email });
-        } else if (role === 'recruiter') {
-            const recDoc = await RecruiterProfile.findOne({ email: foundUser.email });
-            profile = recDoc ? recDoc.companyProfile : null;
+        if (foundUser.role === 'student') {
+            profile = await StudentProfile.findOne({
+                $or: [
+                    { email: foundUser.email },
+                    { userId: foundUser._id }
+                ]
+            });
+        } else if (foundUser.role === 'recruiter') {
+            const recDoc = await RecruiterProfile.findOne({
+                $or: [
+                    { email: foundUser.email },
+                    { userId: foundUser._id }
+                ]
+            });
+            profile = recDoc ? (recDoc.companyProfile || recDoc) : null;
         }
 
         res.status(200).json({
-            message: `User logged in successfully as ${role}`,
+            message: `User logged in successfully as ${foundUser.role}`,
             token,
-            user: { email: foundUser.email, role: foundUser.role },
+            user: { _id: foundUser._id, id: foundUser._id.toString(), email: foundUser.email, role: foundUser.role },
             profile
         });
     } catch (error) {
@@ -67,7 +89,7 @@ export const registerUser = async (req, res) => {
         res.status(201).json({
             token: generateToken(newUser._id, newUser.role),
             message: `User registered successfully as ${role}`,
-            user: { email, role }
+            user: { _id: newUser._id, id: newUser._id.toString(), email, role }
         });
     } catch (error) {
         console.error("Error registering user:", error);
@@ -112,7 +134,10 @@ export const saveStudentProfile = async (req, res) => {
 
 export const getStudentProfile = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: "Email is required to fetch profile" });
+        }
         const profile = await StudentProfile.findOne({ email });
         if (!profile) {
             return res.status(404).json({ message: "Student profile not found" });
@@ -157,7 +182,10 @@ export const saveRecruiterProfile = async (req, res) => {
 
 export const getRecruiterProfile = async (req, res) => {
     try {
-        const { email } = req.params;
+        const email = req.body?.email || req.query?.email || req.params?.email;
+        if (!email) {
+            return res.status(400).json({ message: "Email is required to fetch profile" });
+        }
         const profile = await RecruiterProfile.findOne({ email });
         if (!profile) {
             return res.status(404).json({ message: "Recruiter profile not found" });

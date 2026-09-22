@@ -2,181 +2,130 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
     Bell, BellRing, Check, CheckCheck, Trash2, Eye,
     Building, Calendar, Clock, AlertCircle, Sparkles,
-    CheckCircle, Video, Award, Megaphone, X, ArrowRight, ExternalLink
+    CheckCircle, Video, Award, Megaphone, X, ArrowRight
 } from 'lucide-react';
 import './Studentnotifications.css';
+import { authFetch } from '../../utils/api';
+import { getSocket } from '../../utils/socket';
 
-// Initial preloaded notification data covering all requested types
-const INITIAL_NOTIFICATIONS = [
-    {
-        id: 'notif-1',
-        type: 'interview', // 'job' | 'shortlist' | 'interview' | 'offer' | 'admin'
-        title: 'Technical Interview Scheduled with Google',
-        company: 'Google',
-        message: 'Your Round 2 Technical Interview for Software Development Engineer (SDE-1) has been scheduled for 24 Sep 2026 at 02:30 PM IST via Google Meet.',
-        time: '15 minutes ago',
-        timestamp: Date.now() - 15 * 60 * 1000,
-        unread: true,
-        actionUrl: 'studentinterviews',
-        actionText: 'View Interview Details',
-        sender: 'Google Campus Hiring Team',
-        fullDetails: {
-            round: 'Round 2: System Design & Coding',
-            date: '24 Sep 2026, 02:30 PM - 03:45 PM',
-            platform: 'Google Meet',
-            interviewer: 'Sundar / Staff Engineer'
-        }
-    },
-    {
-        id: 'notif-2',
-        type: 'shortlist',
-        title: 'Shortlisted for Microsoft Frontend Internship',
-        company: 'Microsoft',
-        message: 'Congratulations! Your profile has cleared initial screening and you are shortlisted for the Frontend Engineering Intern drive.',
-        time: '2 hours ago',
-        timestamp: Date.now() - 2 * 3600 * 1000,
-        unread: true,
-        actionUrl: 'studentapplications',
-        actionText: 'Track Application Status',
-        sender: 'Microsoft University Recruiting',
-        fullDetails: {
-            role: 'Frontend Engineering Intern',
-            location: 'Hyderabad, India',
-            nextStep: 'Online Coding Assessment scheduled for 28 Sep 2026'
-        }
-    },
-    {
-        id: 'notif-3',
-        type: 'offer',
-        title: '🎉 Selected & Offer Extended at Atlassian!',
-        company: 'Atlassian',
-        message: 'Congratulations! You have been selected for the Associate Product Manager role at Atlassian with an annual package of ₹26 LPA.',
-        time: '1 day ago',
-        timestamp: Date.now() - 24 * 3600 * 1000,
-        unread: true,
-        actionUrl: 'studentapplications',
-        actionText: 'View Offer Letter',
-        sender: 'Atlassian People & Talent',
-        fullDetails: {
-            role: 'Associate Product Manager',
-            ctc: '₹26 LPA (Full-time)',
-            joiningDate: 'July 2027',
-            location: 'Bengaluru / Remote Friendly'
-        }
-    },
-    {
-        id: 'notif-4',
-        type: 'job',
-        title: 'Job Post Updated: Amazon SDE Drive Extended',
-        company: 'Amazon',
-        message: 'Amazon has updated the job description and extended the registration deadline for Backend Developer (Go / Node.js) to 02 Oct 2026.',
-        time: '2 days ago',
-        timestamp: Date.now() - 48 * 3600 * 1000,
-        unread: false,
-        actionUrl: 'studentjobs',
-        actionText: 'View Job Posting',
-        sender: 'Amazon Campus Recruiting',
-        fullDetails: {
-            role: 'Backend Developer (Go / Node.js)',
-            updatedCriteria: 'Eligible Branches updated to include AI/DS and CSE',
-            newDeadline: '02 Oct 2026'
-        }
-    },
-    {
-        id: 'notif-5',
-        type: 'admin',
-        title: 'Placement Cell Announcement: Resume Review Drive',
-        company: 'Campus Placement Cell',
-        message: 'Mandatory briefing and 1-on-1 resume verification session tomorrow at 10:00 AM in the Central Auditorium for 2027/2028 batch students.',
-        time: '3 days ago',
-        timestamp: Date.now() - 72 * 3600 * 1000,
-        unread: false,
-        actionUrl: 'studentprofile',
-        actionText: 'Update Resume in Profile',
-        sender: 'Head of Placements / Admin Cell',
-        fullDetails: {
-            topic: 'Pre-placement talk & resume formatting guidelines',
-            venue: 'Auditorium Hall B',
-            time: '10:00 AM - 12:30 PM'
-        }
-    }
-];
-
-export default function Studentnotifications({ onNavigate }) {
-    // Load from localStorage or defaults
-    const [notifications, setNotifications] = useState(() => {
-        const saved = localStorage.getItem('student_notifications');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) return parsed;
-            } catch (e) {
-                // fallback
-            }
-        }
-        return INITIAL_NOTIFICATIONS;
-    });
-
-    // Active filter ('all' | 'unread')
+export default function Studentnotifications({ user, onNavigate }) {
+    const [notifications, setNotifications] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState('all');
-
-    // Modal state for View Details
     const [selectedNotif, setSelectedNotif] = useState(null);
 
-    // Save and broadcast updates
-    const persistNotifications = (updatedList) => {
-        setNotifications(updatedList);
-        localStorage.setItem('student_notifications', JSON.stringify(updatedList));
-        window.dispatchEvent(new Event('student_notifications_updated'));
-    };
+    // Resolve userId from the user object (supports _id, id fields)
+    const userId = user?._id || user?.id;
 
-    // Mark single notification as read
-    const markAsRead = (id) => {
-        const updated = notifications.map(n => n.id === id ? { ...n, unread: false } : n);
-        persistNotifications(updated);
-    };
-
-    // Mark all as read
-    const handleMarkAllRead = () => {
-        const updated = notifications.map(n => ({ ...n, unread: false }));
-        persistNotifications(updated);
-    };
-
-    // Delete single notification
-    const handleDeleteNotif = (id, e) => {
-        e?.stopPropagation();
-        const updated = notifications.filter(n => n.id !== id);
-        persistNotifications(updated);
-        if (selectedNotif?.id === id) setSelectedNotif(null);
-    };
-
-    // Clear all notifications
-    const handleClearAll = () => {
-        if (window.confirm('Are you sure you want to clear all notifications?')) {
-            persistNotifications([]);
+    // ── Fetch from DB ────────────────────────────────────────────────────────
+    const loadNotifications = async () => {
+        try {
+            if (!userId) return;
+            const res = await authFetch(
+                `http://localhost:5000/api/notifications?userId=${userId}`
+            );
+            if (res.ok) {
+                const data = await res.json();
+                setNotifications(Array.isArray(data) ? data : []);
+            }
+        } catch (e) {
+            console.error('[Notifications] Failed to load:', e.message);
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Open view details modal
+    useEffect(() => {
+        loadNotifications();
+    }, [userId]);
+
+    // ── Real-time socket listener ─────────────────────────────────────────────
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const handleNew = (notif) => {
+            // Prepend incoming socket notification
+            setNotifications(prev => [{ ...notif, seen: false }, ...prev]);
+            // Dispatch event so StudentUI badge updates
+            window.dispatchEvent(new Event('student_notifications_updated'));
+        };
+        socket.on('new_notification', handleNew);
+        return () => socket.off('new_notification', handleNew);
+    }, []);
+
+    // ── Actions ──────────────────────────────────────────────────────────────
+    const markAsRead = async (notifId) => {
+        try {
+            await authFetch(`http://localhost:5000/api/notifications/${notifId}/read`, {
+                method: 'PATCH'
+            });
+            setNotifications(prev =>
+                prev.map(n => n._id === notifId ? { ...n, seen: true } : n)
+            );
+            window.dispatchEvent(new Event('student_notifications_updated'));
+        } catch (e) {
+            console.error('Failed to mark as read:', e);
+        }
+    };
+
+    const handleMarkAllRead = async () => {
+        try {
+            await authFetch('http://localhost:5000/api/notifications/mark-all-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
+            setNotifications(prev => prev.map(n => ({ ...n, seen: true })));
+            window.dispatchEvent(new Event('student_notifications_updated'));
+        } catch (e) {
+            console.error('Failed to mark all read:', e);
+        }
+    };
+
+    const handleDeleteNotif = async (notifId, e) => {
+        e?.stopPropagation();
+        try {
+            await authFetch(`http://localhost:5000/api/notifications/${notifId}`, {
+                method: 'DELETE'
+            });
+            setNotifications(prev => prev.filter(n => n._id !== notifId));
+            if (selectedNotif?._id === notifId) setSelectedNotif(null);
+            window.dispatchEvent(new Event('student_notifications_updated'));
+        } catch (e) {
+            console.error('Failed to delete notification:', e);
+        }
+    };
+
+    const handleClearAll = async () => {
+        if (!window.confirm('Are you sure you want to clear all notifications?')) return;
+        try {
+            await authFetch('http://localhost:5000/api/notifications/clear-all', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
+            setNotifications([]);
+            window.dispatchEvent(new Event('student_notifications_updated'));
+        } catch (e) {
+            console.error('Failed to clear all:', e);
+        }
+    };
+
     const handleViewDetails = (notif) => {
-        markAsRead(notif.id);
+        if (!notif.seen) markAsRead(notif._id);
         setSelectedNotif(notif);
     };
 
-    // Unread count
-    const unreadCount = useMemo(() => {
-        return notifications.filter(n => n.unread).length;
-    }, [notifications]);
+    // ── Derived values ───────────────────────────────────────────────────────
+    const unreadCount = useMemo(() => notifications.filter(n => !n.seen).length, [notifications]);
 
-    // Filtered notifications
     const filteredNotifications = useMemo(() => {
-        if (activeFilter === 'unread') {
-            return notifications.filter(n => n.unread);
-        }
+        if (activeFilter === 'unread') return notifications.filter(n => !n.seen);
         return notifications;
     }, [notifications, activeFilter]);
 
-    // Helper for icons
+    // ── Helpers ──────────────────────────────────────────────────────────────
     const getNotifIcon = (type) => {
         switch (type) {
             case 'job': return <Building size={20} />;
@@ -184,10 +133,24 @@ export default function Studentnotifications({ onNavigate }) {
             case 'interview': return <Video size={20} />;
             case 'offer': return <Award size={20} />;
             case 'admin': return <Megaphone size={20} />;
+            case 'application': return <Bell size={20} />;
             default: return <Bell size={20} />;
         }
     };
 
+    const formatTime = (ts) => {
+        if (!ts) return '';
+        const diff = Date.now() - new Date(ts).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'Just now';
+        if (mins < 60) return `${mins} minute${mins > 1 ? 's' : ''} ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+        const days = Math.floor(hrs / 24);
+        return `${days} day${days > 1 ? 's' : ''} ago`;
+    };
+
+    // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="notifs-container">
             {/* ── 1. Hero Header ─────────────────────────────────────────────── */}
@@ -195,13 +158,13 @@ export default function Studentnotifications({ onNavigate }) {
                 <div className="notifs-header-top">
                     <h1>
                         <BellRing size={28} color="#f87171" />
-                        Placement Alerts & Notifications
+                        Placement Alerts &amp; Notifications
                     </h1>
                     <p>Stay informed with instant alerts regarding recruiter job updates, shortlist results, interview invitations, and admin announcements.</p>
                 </div>
             </section>
 
-            {/* ── 2. Filter Toolbar & Bulk Actions ──────────────────────────── */}
+            {/* ── 2. Filter Toolbar &amp; Bulk Actions ──────────────────────────── */}
             <div className="notifs-toolbar">
                 <div className="notifs-tabs">
                     <button
@@ -236,7 +199,11 @@ export default function Studentnotifications({ onNavigate }) {
 
             {/* ── 3. Notifications List ─────────────────────────────────────── */}
             <div className="notifs-list">
-                {filteredNotifications.length === 0 ? (
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '3.5rem 1.5rem', background: '#ffffff', borderRadius: 16 }}>
+                        <p style={{ color: '#64748b' }}>Loading notifications…</p>
+                    </div>
+                ) : filteredNotifications.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '3.5rem 1.5rem', background: '#ffffff', borderRadius: 16, border: '1px dashed #cbd5e1' }}>
                         <AlertCircle size={40} color="#94a3b8" style={{ marginBottom: '0.75rem' }} />
                         <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>No notifications to display</h3>
@@ -247,29 +214,28 @@ export default function Studentnotifications({ onNavigate }) {
                 ) : (
                     filteredNotifications.map((notif) => (
                         <div
-                            key={notif.id}
-                            className={`notif-item-card ${notif.unread ? 'unread' : ''}`}
+                            key={notif._id}
+                            className={`notif-item-card ${!notif.seen ? 'unread' : ''}`}
                             onClick={() => handleViewDetails(notif)}
                             style={{ cursor: 'pointer' }}
                         >
                             <div className="notif-content-area">
                                 {/* Icon box */}
-                                <div className={`notif-icon-box ${notif.type}`}>
+                                <div className={`notif-icon-box ${notif.type || 'general'}`}>
                                     {getNotifIcon(notif.type)}
                                 </div>
 
                                 {/* Text Details */}
                                 <div className="notif-details">
                                     <div className="notif-title-row">
-                                        <h4>{notif.title}</h4>
-                                        {notif.unread && <span className="unread-dot" title="Unread notification" />}
-                                        <span className={`notif-tag ${notif.type}`}>
-                                            {notif.type}
+                                        <h4>{notif.message}</h4>
+                                        {!notif.seen && <span className="unread-dot" title="Unread notification" />}
+                                        <span className={`notif-tag ${notif.type || 'general'}`}>
+                                            {notif.type || 'general'}
                                         </span>
                                     </div>
-                                    <p className="notif-message-text">{notif.message}</p>
                                     <span className="notif-time-text">
-                                        <Clock size={13} /> {notif.time} • From: {notif.sender}
+                                        <Clock size={13} /> {formatTime(notif.timestamp || notif.createdAt)} • From: {notif.senderRole || 'system'}
                                     </span>
                                 </div>
                             </div>
@@ -285,7 +251,7 @@ export default function Studentnotifications({ onNavigate }) {
                                 <button
                                     className="btn-notif-delete"
                                     title="Delete notification"
-                                    onClick={(e) => handleDeleteNotif(notif.id, e)}
+                                    onClick={(e) => handleDeleteNotif(notif._id, e)}
                                 >
                                     <Trash2 size={16} />
                                 </button>
@@ -309,15 +275,15 @@ export default function Studentnotifications({ onNavigate }) {
                         <div className="modal-scrollable-body">
                             {/* Header Banner */}
                             <div className="modal-company-hero">
-                                <div className={`notif-icon-box ${selectedNotif.type}`} style={{ width: 50, height: 50 }}>
+                                <div className={`notif-icon-box ${selectedNotif.type || 'general'}`} style={{ width: 50, height: 50 }}>
                                     {getNotifIcon(selectedNotif.type)}
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <h3>{selectedNotif.title}</h3>
-                                    <p>{selectedNotif.sender} • {selectedNotif.time}</p>
+                                    <h3>{selectedNotif.type ? selectedNotif.type.toUpperCase() : 'Notification'}</h3>
+                                    <p>{selectedNotif.senderRole || 'System'} • {formatTime(selectedNotif.timestamp || selectedNotif.createdAt)}</p>
                                 </div>
-                                <span className={`notif-tag ${selectedNotif.type}`}>
-                                    {selectedNotif.type}
+                                <span className={`notif-tag ${selectedNotif.type || 'general'}`}>
+                                    {selectedNotif.type || 'general'}
                                 </span>
                             </div>
 
@@ -328,28 +294,13 @@ export default function Studentnotifications({ onNavigate }) {
                                     {selectedNotif.message}
                                 </p>
                             </div>
-
-                            {/* Dynamic context details */}
-                            {selectedNotif.fullDetails && (
-                                <div>
-                                    <h4 className="modal-section-title">Details & Specifications</h4>
-                                    <div className="modal-info-grid">
-                                        {Object.entries(selectedNotif.fullDetails).map(([k, v], idx) => (
-                                            <div key={idx} className="modal-info-card">
-                                                <span>{k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</span>
-                                                <strong>{v}</strong>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         <div className="modal-footer-custom" style={{ justifyContent: 'space-between' }}>
                             <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                                onClick={() => handleDeleteNotif(selectedNotif.id)}
+                                onClick={() => handleDeleteNotif(selectedNotif._id)}
                             >
                                 <Trash2 size={15} /> Delete Notification
                             </button>
@@ -358,17 +309,6 @@ export default function Studentnotifications({ onNavigate }) {
                                 <button className="btn-secondary" onClick={() => setSelectedNotif(null)}>
                                     Close
                                 </button>
-                                {selectedNotif.actionUrl && onNavigate && (
-                                    <button
-                                        className="btn-primary"
-                                        onClick={() => {
-                                            setSelectedNotif(null);
-                                            onNavigate(selectedNotif.actionUrl);
-                                        }}
-                                    >
-                                        {selectedNotif.actionText} <ArrowRight size={14} />
-                                    </button>
-                                )}
                             </div>
                         </div>
                     </div>
